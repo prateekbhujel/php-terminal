@@ -10,3 +10,9 @@ var_dump(terminal_is_tty());
 var_dump(terminal_supports_ansi());
 var_dump(terminal_get_size());
 var_dump(terminal_write("hello from terminal\n"));
+
+$mode = terminal_enable_raw_mode();
+var_dump($mode === false || is_string($mode));
+if (is_string($mode)) {
+	var_dump(terminal_restore_mode($mode));
+}

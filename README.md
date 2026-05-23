@@ -11,8 +11,11 @@ The first cut stays small on purpose. It exposes the pieces that are awkward to 
 - `terminal_supports_ansi(int $stream = TERMINAL_STDOUT): bool`
 - `terminal_get_size(int $stream = TERMINAL_STDOUT): array{columns:int, rows:int}|false`
 - `terminal_write(string $data, int $stream = TERMINAL_STDOUT): int|false`
+- `terminal_enable_raw_mode(int $stream = TERMINAL_STDIN): string|false`
+- `terminal_restore_mode(string $mode): bool`
 
 `terminal_write()` accepts `TERMINAL_STDOUT` and `TERMINAL_STDERR`.
+`terminal_enable_raw_mode()` currently accepts `TERMINAL_STDIN` and returns an opaque mode token that should be passed back to `terminal_restore_mode()`.
 
 Constants:
 
@@ -80,6 +83,15 @@ var_dump(terminal_is_tty());
 var_dump(terminal_supports_ansi());
 var_dump(terminal_get_size());
 terminal_write("hello from terminal\n");
+
+$mode = terminal_enable_raw_mode();
+if (is_string($mode)) {
+    try {
+        // read from STDIN here
+    } finally {
+        terminal_restore_mode($mode);
+    }
+}
 ```
 
 There is also a runnable example in [`examples/basic.php`](./examples/basic.php).
