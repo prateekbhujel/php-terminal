@@ -35,6 +35,22 @@ This extension stays narrower:
 - no framework coupling
 - one user-facing API on both backends
 
+## Enabling the extension
+
+After you build and install it, enable it like any normal PHP extension:
+
+### Unix-like systems
+
+```ini
+extension=terminal
+```
+
+### Windows
+
+```ini
+extension=php_terminal.dll
+```
+
 ## Build
 
 ### Unix-like systems
