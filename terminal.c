@@ -13,9 +13,23 @@
 # include <windows.h>
 #else
 # include <errno.h>
+# include <termios.h>
 # include <unistd.h>
 # include <sys/ioctl.h>
 #endif
+
+#define TERMINAL_MODE_TOKEN_MAGIC "PHPTTY1"
+#define TERMINAL_MODE_TOKEN_MAGIC_LEN (sizeof(TERMINAL_MODE_TOKEN_MAGIC) - 1)
+
+typedef struct _terminal_saved_mode {
+	char magic[TERMINAL_MODE_TOKEN_MAGIC_LEN];
+	zend_long stream;
+#ifdef PHP_WIN32
+	DWORD mode;
+#else
+	struct termios mode;
+#endif
+} terminal_saved_mode;
 
 static zend_always_inline bool terminal_valid_stream(zend_long stream)
 {
@@ -98,6 +112,41 @@ static bool terminal_stream_write(zend_long stream, const char *buffer, size_t b
 	*written = (zend_long) out;
 
 	return true;
+}
+
+static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mode *saved)
+{
+	HANDLE handle = terminal_handle_from_id(stream);
+	DWORD mode;
+	DWORD raw_mode;
+
+	if (handle == INVALID_HANDLE_VALUE || handle == NULL || !GetConsoleMode(handle, &mode)) {
+		return false;
+	}
+
+	raw_mode = mode;
+	raw_mode &= ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
+	raw_mode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+
+	if (!SetConsoleMode(handle, raw_mode)) {
+		return false;
+	}
+
+	memset(saved, 0, sizeof(*saved));
+	memcpy(saved->magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN);
+	saved->stream = stream;
+	saved->mode = mode;
+
+	return true;
+}
+
+static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
+{
+	HANDLE handle = terminal_handle_from_id(saved->stream);
+
+	return handle != INVALID_HANDLE_VALUE
+		&& handle != NULL
+		&& SetConsoleMode(handle, saved->mode);
 }
 #else
 static int terminal_fd_from_id(zend_long stream)
@@ -183,6 +232,58 @@ static bool terminal_stream_write(zend_long stream, const char *buffer, size_t b
 
 	return true;
 }
+
+static void terminal_make_raw_mode(struct termios *mode)
+{
+	tcflag_t lflag = ECHO | ICANON | ISIG;
+
+#ifdef ECHONL
+	lflag |= ECHONL;
+#endif
+#ifdef IEXTEN
+	lflag |= IEXTEN;
+#endif
+
+	mode->c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+	mode->c_oflag &= ~OPOST;
+	mode->c_lflag &= ~lflag;
+	mode->c_cflag &= ~(CSIZE | PARENB);
+	mode->c_cflag |= CS8;
+	mode->c_cc[VMIN] = 1;
+	mode->c_cc[VTIME] = 0;
+}
+
+static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mode *saved)
+{
+	int fd = terminal_fd_from_id(stream);
+	struct termios mode;
+	struct termios raw_mode;
+
+	if (fd < 0 || tcgetattr(fd, &mode) != 0) {
+		return false;
+	}
+
+	raw_mode = mode;
+	terminal_make_raw_mode(&raw_mode);
+
+	if (tcsetattr(fd, TCSANOW, &raw_mode) != 0) {
+		return false;
+	}
+
+	memset(saved, 0, sizeof(*saved));
+	memcpy(saved->magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN);
+	saved->stream = stream;
+	saved->mode = mode;
+
+	return true;
+}
+
+static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
+{
+	int fd = terminal_fd_from_id(saved->stream);
+
+	return fd >= 0 && tcsetattr(fd, TCSANOW, &saved->mode) == 0;
+}
 #endif
 
 static void terminal_validate_stream_or_throw(zend_long stream, uint32_t arg_num)
@@ -196,6 +297,13 @@ static void terminal_validate_output_stream_or_throw(zend_long stream, uint32_t 
 {
 	if (stream != TERMINAL_STREAM_STDOUT && stream != TERMINAL_STREAM_STDERR) {
 		zend_argument_value_error(arg_num, "must be TERMINAL_STDOUT or TERMINAL_STDERR");
+	}
+}
+
+static void terminal_validate_input_stream_or_throw(zend_long stream, uint32_t arg_num)
+{
+	if (stream != TERMINAL_STREAM_STDIN) {
+		zend_argument_value_error(arg_num, "must be TERMINAL_STDIN");
 	}
 }
 
@@ -291,6 +399,52 @@ PHP_FUNCTION(terminal_write)
 	}
 
 	RETURN_LONG(written);
+}
+
+PHP_FUNCTION(terminal_enable_raw_mode)
+{
+	zend_long stream = TERMINAL_STREAM_STDIN;
+	terminal_saved_mode saved;
+
+	ZEND_PARSE_PARAMETERS_START(0, 1)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG(stream)
+	ZEND_PARSE_PARAMETERS_END();
+
+	terminal_validate_input_stream_or_throw(stream, 1);
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+
+	if (!terminal_enable_stream_raw_mode(stream, &saved)) {
+		RETURN_FALSE;
+	}
+
+	RETURN_STRINGL((const char *) &saved, sizeof(saved));
+}
+
+PHP_FUNCTION(terminal_restore_mode)
+{
+	zend_string *mode;
+	terminal_saved_mode saved;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_STR(mode)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (ZSTR_LEN(mode) != sizeof(saved)) {
+		zend_argument_value_error(1, "must be a terminal mode token returned by terminal_enable_raw_mode()");
+		RETURN_THROWS();
+	}
+
+	memcpy(&saved, ZSTR_VAL(mode), sizeof(saved));
+
+	if (memcmp(saved.magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN) != 0) {
+		zend_argument_value_error(1, "must be a terminal mode token returned by terminal_enable_raw_mode()");
+		RETURN_THROWS();
+	}
+
+	RETURN_BOOL(terminal_restore_stream_mode(&saved));
 }
 
 PHP_MINIT_FUNCTION(terminal)

@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 2bc60c2cd1580fb37a8c97b52c69a6ca97832529 */
+ * Stub hash: a87a90e2795141007ad81fd27bba4e1bff682c88 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_terminal_backend, 0, 0, IS_STRING, 0)
 ZEND_END_ARG_INFO()
@@ -19,11 +19,21 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_terminal_write, 0, 1, MAY_BE_LON
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, stream, IS_LONG, 0, "TERMINAL_STDOUT")
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_terminal_enable_raw_mode, 0, 0, MAY_BE_STRING|MAY_BE_FALSE)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, stream, IS_LONG, 0, "TERMINAL_STDIN")
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_terminal_restore_mode, 0, 1, _IS_BOOL, 0)
+	ZEND_ARG_TYPE_INFO(0, mode, IS_STRING, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_FUNCTION(terminal_backend);
 ZEND_FUNCTION(terminal_is_tty);
 ZEND_FUNCTION(terminal_supports_ansi);
 ZEND_FUNCTION(terminal_get_size);
 ZEND_FUNCTION(terminal_write);
+ZEND_FUNCTION(terminal_enable_raw_mode);
+ZEND_FUNCTION(terminal_restore_mode);
 
 static const zend_function_entry ext_functions[] = {
 	ZEND_FE(terminal_backend, arginfo_terminal_backend)
@@ -31,5 +41,7 @@ static const zend_function_entry ext_functions[] = {
 	ZEND_FE(terminal_supports_ansi, arginfo_terminal_supports_ansi)
 	ZEND_FE(terminal_get_size, arginfo_terminal_get_size)
 	ZEND_FE(terminal_write, arginfo_terminal_write)
+	ZEND_FE(terminal_enable_raw_mode, arginfo_terminal_enable_raw_mode)
+	ZEND_FE(terminal_restore_mode, arginfo_terminal_restore_mode)
 	ZEND_FE_END
 };
