@@ -192,6 +192,13 @@ static void terminal_validate_stream_or_throw(zend_long stream, uint32_t arg_num
 	}
 }
 
+static void terminal_validate_output_stream_or_throw(zend_long stream, uint32_t arg_num)
+{
+	if (stream != TERMINAL_STREAM_STDOUT && stream != TERMINAL_STREAM_STDERR) {
+		zend_argument_value_error(arg_num, "must be TERMINAL_STDOUT or TERMINAL_STDERR");
+	}
+}
+
 PHP_FUNCTION(terminal_backend)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
@@ -274,7 +281,7 @@ PHP_FUNCTION(terminal_write)
 		Z_PARAM_LONG(stream)
 	ZEND_PARSE_PARAMETERS_END();
 
-	terminal_validate_stream_or_throw(stream, 2);
+	terminal_validate_output_stream_or_throw(stream, 2);
 	if (EG(exception)) {
 		RETURN_THROWS();
 	}

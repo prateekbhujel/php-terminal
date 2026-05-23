@@ -10,7 +10,7 @@
     <summary>Cross-platform terminal helpers for PHP CLI.</summary>
     <description>
         The terminal extension exposes a small cross-platform terminal capability layer for PHP CLI programs.
-        It currently provides backend detection, TTY checks, ANSI capability checks, terminal size lookup, and direct writes to stdin/stdout/stderr handles with shared userland APIs on Unix-like systems and Windows.
+        It currently provides backend detection, TTY checks, ANSI capability checks, terminal size lookup, and direct writes to stdout/stderr with shared userland APIs on Unix-like systems and Windows.
     </description>
     <lead>
         <name>Pratik Bhujel</name>

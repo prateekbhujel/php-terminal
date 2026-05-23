@@ -12,6 +12,8 @@ The first cut stays small on purpose. It exposes the pieces that are awkward to 
 - `terminal_get_size(int $stream = TERMINAL_STDOUT): array{columns:int, rows:int}|false`
 - `terminal_write(string $data, int $stream = TERMINAL_STDOUT): int|false`
 
+`terminal_write()` accepts `TERMINAL_STDOUT` and `TERMINAL_STDERR`.
+
 Constants:
 
 - `TERMINAL_STDIN`
