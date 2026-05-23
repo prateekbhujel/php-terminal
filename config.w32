@@ -1,0 +1,7 @@
+ARG_ENABLE('terminal', 'terminal support', 'no');
+
+if (PHP_TERMINAL != 'no') {
+	AC_DEFINE('HAVE_TERMINAL', 1, "Define to 1 if the PHP extension 'terminal' is available.");
+
+	EXTENSION('terminal', 'terminal.c', null, '/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1');
+}

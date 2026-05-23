@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unix:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ['8.2', '8.3', '8.4']
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: none
+
+      - name: Prepare build
+        run: |
+          phpize
+          ./configure --enable-terminal
+
+      - name: Build
+        run: make -j"$(nproc)"
+
+      - name: Test
+        run: make test REPORT_EXIT_STATUS=1 NO_INTERACTION=1
+
+  windows:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ['8.2', '8.3', '8.4']
+        arch: ['x64']
+        ts: ['nts', 'ts']
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build extension
+        uses: php/php-windows-builder/extension@v1
+        with:
+          php-version: ${{ matrix.php-version }}
+          arch: ${{ matrix.arch }}
+          ts: ${{ matrix.ts }}

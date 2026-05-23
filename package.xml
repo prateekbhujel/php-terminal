@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package packagerversion="1.4.11"
+         version="2.0"
+         xmlns="http://pear.php.net/dtd/package-2.0"
+         xmlns:tasks="http://pear.php.net/dtd/tasks-1.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pear.php.net/dtd/tasks-1.0 http://pear.php.net/dtd/tasks-1.0.xsd http://pear.php.net/dtd/package-2.0 http://pear.php.net/dtd/package-2.0.xsd">
+    <name>terminal</name>
+    <channel>pecl.php.net</channel>
+    <summary>Cross-platform terminal helpers for PHP CLI.</summary>
+    <description>
+        The terminal extension exposes a small cross-platform terminal capability layer for PHP CLI programs.
+        It currently provides backend detection, TTY checks, ANSI capability checks, terminal size lookup, and direct writes to stdin/stdout/stderr handles with shared userland APIs on Unix-like systems and Windows.
+    </description>
+    <lead>
+        <name>Pratik Bhujel</name>
+        <user>prateekbhujel</user>
+        <email>prateekbhujelpb@gmail.com</email>
+        <active>yes</active>
+    </lead>
+    <date>2026-05-23</date>
+    <version>
+        <release>0.1.0dev</release>
+        <api>0.1.0dev</api>
+    </version>
+    <stability>
+        <release>alpha</release>
+        <api>alpha</api>
+    </stability>
+    <license uri="https://www.php.net/license/3_01.txt">PHP License</license>
+    <notes>
+        - First public development cut.
+        - Added backend detection, TTY detection, ANSI detection, terminal sizing, and stream writes.
+        - Added Unix and Windows build support.
+    </notes>
+    <contents>
+        <dir name="/">
+            <file name="CREDITS" role="doc" />
+            <file name="LICENSE" role="doc" />
+            <file name="README.md" role="doc" />
+            <file name="config.m4" role="src" />
+            <file name="config.w32" role="src" />
+            <file name="php_terminal.h" role="src" />
+            <file name="terminal.c" role="src" />
+            <file name="terminal.stub.php" role="src" />
+            <file name="terminal_arginfo.h" role="src" />
+            <dir name="examples">
+                <file name="basic.php" role="doc" />
+            </dir>
+            <dir name="tests">
+                <file name="001.phpt" role="test" />
+                <file name="002.phpt" role="test" />
+                <file name="003.phpt" role="test" />
+            </dir>
+        </dir>
+    </contents>
+    <dependencies>
+        <required>
+            <php>
+                <min>8.2.0</min>
+            </php>
+            <pearinstaller>
+                <min>1.10.0</min>
+            </pearinstaller>
+        </required>
+    </dependencies>
+    <providesextension>terminal</providesextension>
+    <extsrcrelease />
+</package>
