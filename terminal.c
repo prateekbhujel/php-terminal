@@ -447,6 +447,24 @@ PHP_FUNCTION(terminal_restore_mode)
 	RETURN_BOOL(terminal_restore_stream_mode(&saved));
 }
 
+PHP_FUNCTION(terminal_read_key)
+{
+	double timeout = 0;
+	bool timeout_is_null = true;
+
+	ZEND_PARSE_PARAMETERS_START(0, 1)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_DOUBLE_OR_NULL(timeout, timeout_is_null)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!timeout_is_null && timeout < 0) {
+		zend_argument_value_error(1, "must be greater than or equal to 0");
+		RETURN_THROWS();
+	}
+
+	RETURN_FALSE;
+}
+
 PHP_MINIT_FUNCTION(terminal)
 {
 #if defined(ZTS) && defined(COMPILE_DL_TERMINAL)

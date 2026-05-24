@@ -13,9 +13,11 @@ The first cut stays small on purpose. It exposes the pieces that are awkward to 
 - `terminal_write(string $data, int $stream = TERMINAL_STDOUT): int|false`
 - `terminal_enable_raw_mode(int $stream = TERMINAL_STDIN): string|false`
 - `terminal_restore_mode(string $mode): bool`
+- `terminal_read_key(?float $timeout = null): string|false`
 
 `terminal_write()` accepts `TERMINAL_STDOUT` and `TERMINAL_STDERR`.
 `terminal_enable_raw_mode()` currently accepts `TERMINAL_STDIN` and returns an opaque mode token that should be passed back to `terminal_restore_mode()`.
+`terminal_read_key()` will return printable keys as-is, named keys as strings like `up`, `down`, `left`, `right`, `enter`, `backspace`, `escape`, and `tab`, and `false` when no key is available before the timeout.
 
 Constants:
 
@@ -87,7 +89,7 @@ terminal_write("hello from terminal\n");
 $mode = terminal_enable_raw_mode();
 if (is_string($mode)) {
     try {
-        // read from STDIN here
+        $key = terminal_read_key(0.5);
     } finally {
         terminal_restore_mode($mode);
     }
