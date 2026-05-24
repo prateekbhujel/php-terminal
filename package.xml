@@ -20,8 +20,8 @@
     </lead>
     <date>2026-05-24</date>
     <version>
-        <release>0.1.0dev</release>
-        <api>0.1.0dev</api>
+        <release>0.1.0</release>
+        <api>0.1.0</api>
     </version>
     <stability>
         <release>alpha</release>
