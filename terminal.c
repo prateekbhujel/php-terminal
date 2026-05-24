@@ -13,6 +13,10 @@
 # include <windows.h>
 #else
 # include <errno.h>
+# include <limits.h>
+# include <stdint.h>
+# include <sys/select.h>
+# include <sys/time.h>
 # include <termios.h>
 # include <unistd.h>
 # include <sys/ioctl.h>
@@ -20,6 +24,7 @@
 
 #define TERMINAL_MODE_TOKEN_MAGIC "PHPTTY1"
 #define TERMINAL_MODE_TOKEN_MAGIC_LEN (sizeof(TERMINAL_MODE_TOKEN_MAGIC) - 1)
+#define TERMINAL_ESCAPE_TIMEOUT_MS 25
 
 typedef struct _terminal_saved_mode {
 	char magic[TERMINAL_MODE_TOKEN_MAGIC_LEN];
@@ -284,6 +289,255 @@ static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
 
 	return fd >= 0 && tcsetattr(fd, TCSANOW, &saved->mode) == 0;
 }
+
+static int64_t terminal_current_time_ms(void)
+{
+	struct timeval now;
+
+	if (gettimeofday(&now, NULL) != 0) {
+		return 0;
+	}
+
+	return ((int64_t) now.tv_sec * 1000) + (now.tv_usec / 1000);
+}
+
+static int terminal_timeout_to_ms(double timeout, bool timeout_is_null)
+{
+	double timeout_ms;
+	int timeout_ms_int;
+
+	if (timeout_is_null) {
+		return -1;
+	}
+
+	if (timeout <= 0) {
+		return 0;
+	}
+
+	timeout_ms = timeout * 1000;
+	if (timeout_ms >= INT_MAX) {
+		return INT_MAX;
+	}
+
+	if (timeout_ms < 1) {
+		return 1;
+	}
+
+	timeout_ms_int = (int) timeout_ms;
+
+	return timeout_ms_int < timeout_ms ? timeout_ms_int + 1 : timeout_ms_int;
+}
+
+static int terminal_wait_for_input(int fd, int timeout_ms)
+{
+	fd_set readfds;
+	struct timeval timeout;
+	struct timeval *timeout_ptr = NULL;
+
+	FD_ZERO(&readfds);
+	FD_SET(fd, &readfds);
+
+	if (timeout_ms >= 0) {
+		timeout.tv_sec = timeout_ms / 1000;
+		timeout.tv_usec = (timeout_ms % 1000) * 1000;
+		timeout_ptr = &timeout;
+	}
+
+	return select(fd + 1, &readfds, NULL, NULL, timeout_ptr);
+}
+
+static int terminal_read_byte(int fd, unsigned char *byte, int timeout_ms)
+{
+	int64_t deadline_ms = timeout_ms > 0 ? terminal_current_time_ms() + timeout_ms : 0;
+
+	for (;;) {
+		int wait_ms = timeout_ms;
+		int ready;
+		ssize_t bytes_read;
+
+		if (timeout_ms > 0) {
+			int64_t remaining_ms = deadline_ms - terminal_current_time_ms();
+
+			if (remaining_ms <= 0) {
+				return 0;
+			}
+
+			wait_ms = remaining_ms > INT_MAX ? INT_MAX : (int) remaining_ms;
+		}
+
+		ready = terminal_wait_for_input(fd, wait_ms);
+		if (ready == 0) {
+			return 0;
+		}
+
+		if (ready < 0) {
+			if (errno == EINTR) {
+				continue;
+			}
+
+			return -1;
+		}
+
+		bytes_read = read(fd, byte, 1);
+		if (bytes_read == 1) {
+			return 1;
+		}
+
+		if (bytes_read < 0) {
+			if (errno == EINTR) {
+				continue;
+			}
+
+#ifdef EAGAIN
+			if (errno == EAGAIN) {
+				continue;
+			}
+#endif
+#if defined(EWOULDBLOCK) && (!defined(EAGAIN) || EWOULDBLOCK != EAGAIN)
+			if (errno == EWOULDBLOCK) {
+				continue;
+			}
+#endif
+
+			return -1;
+		}
+
+		return 0;
+	}
+}
+
+static zend_string *terminal_key_string(const char *key)
+{
+	return zend_string_init(key, strlen(key), false);
+}
+
+static zend_string *terminal_key_char(unsigned char key)
+{
+	return zend_string_init((const char *) &key, 1, false);
+}
+
+static zend_string *terminal_key_from_csi_sequence(const unsigned char *sequence, size_t sequence_len)
+{
+	unsigned char final = sequence[sequence_len - 1];
+
+	switch (final) {
+		case 'A':
+			return terminal_key_string("up");
+		case 'B':
+			return terminal_key_string("down");
+		case 'C':
+			return terminal_key_string("right");
+		case 'D':
+			return terminal_key_string("left");
+		case 'H':
+			return terminal_key_string("home");
+		case 'F':
+			return terminal_key_string("end");
+		case '~':
+			switch (sequence[0]) {
+				case '1':
+				case '7':
+					return terminal_key_string("home");
+				case '3':
+					return terminal_key_string("delete");
+				case '4':
+				case '8':
+					return terminal_key_string("end");
+				case '5':
+					return terminal_key_string("pageup");
+				case '6':
+					return terminal_key_string("pagedown");
+			}
+	}
+
+	return terminal_key_string("escape");
+}
+
+static zend_string *terminal_key_from_escape_sequence(int fd)
+{
+	unsigned char sequence[8];
+	size_t sequence_len = 0;
+	int result = terminal_read_byte(fd, &sequence[sequence_len++], TERMINAL_ESCAPE_TIMEOUT_MS);
+
+	if (result <= 0) {
+		return terminal_key_string("escape");
+	}
+
+	if (sequence[0] == 'O') {
+		result = terminal_read_byte(fd, &sequence[sequence_len++], TERMINAL_ESCAPE_TIMEOUT_MS);
+		if (result <= 0) {
+			return terminal_key_string("escape");
+		}
+
+		return terminal_key_from_csi_sequence(sequence + 1, 1);
+	}
+
+	if (sequence[0] != '[') {
+		return terminal_key_string("escape");
+	}
+
+	do {
+		result = terminal_read_byte(fd, &sequence[sequence_len++], TERMINAL_ESCAPE_TIMEOUT_MS);
+		if (result <= 0) {
+			return terminal_key_string("escape");
+		}
+	} while (sequence_len < sizeof(sequence) && !((sequence[sequence_len - 1] >= 'A' && sequence[sequence_len - 1] <= 'Z') || sequence[sequence_len - 1] == '~'));
+
+	return terminal_key_from_csi_sequence(sequence + 1, sequence_len - 1);
+}
+
+static zend_string *terminal_key_from_byte(int fd, unsigned char key)
+{
+	switch (key) {
+		case '\r':
+		case '\n':
+			return terminal_key_string("enter");
+		case '\t':
+			return terminal_key_string("tab");
+		case 0x7f:
+		case '\b':
+			return terminal_key_string("backspace");
+		case 0x1b:
+			return terminal_key_from_escape_sequence(fd);
+		default:
+			return terminal_key_char(key);
+	}
+}
+
+static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null)
+{
+	int fd = terminal_fd_from_id(TERMINAL_STREAM_STDIN);
+	int timeout_ms = terminal_timeout_to_ms(timeout, timeout_is_null);
+	struct termios mode;
+	struct termios raw_mode;
+	unsigned char key;
+	zend_string *result = NULL;
+
+	if (fd < 0 || isatty(fd) != 1 || tcgetattr(fd, &mode) != 0) {
+		return NULL;
+	}
+
+	raw_mode = mode;
+	terminal_make_raw_mode(&raw_mode);
+
+	if (tcsetattr(fd, TCSANOW, &raw_mode) != 0) {
+		return NULL;
+	}
+
+	if (terminal_read_byte(fd, &key, timeout_ms) == 1) {
+		result = terminal_key_from_byte(fd, key);
+	}
+
+	if (tcsetattr(fd, TCSANOW, &mode) != 0) {
+		if (result != NULL) {
+			zend_string_release(result);
+		}
+
+		return NULL;
+	}
+
+	return result;
+}
 #endif
 
 static void terminal_validate_stream_or_throw(zend_long stream, uint32_t arg_num)
@@ -461,6 +715,16 @@ PHP_FUNCTION(terminal_read_key)
 		zend_argument_value_error(1, "must be greater than or equal to 0");
 		RETURN_THROWS();
 	}
+
+#ifndef PHP_WIN32
+	{
+		zend_string *key = terminal_read_stdin_key(timeout, timeout_is_null);
+
+		if (key != NULL) {
+			RETURN_STR(key);
+		}
+	}
+#endif
 
 	RETURN_FALSE;
 }
