@@ -56,6 +56,39 @@ extension=terminal
 extension=php_terminal.dll
 ```
 
+## Trying 0.1.0
+
+The `v0.1.0` alpha release is available at:
+
+https://github.com/prateekbhujel/php-terminal/releases/tag/v0.1.0
+
+Windows builds are attached for PHP 8.2-8.5, x64, TS/NTS. Pick the zip that matches your PHP version and thread-safety mode, copy `php_terminal.dll` into your PHP extension directory, and enable it with:
+
+```ini
+extension=php_terminal.dll
+```
+
+On Unix-like systems, build from source for now:
+
+```sh
+phpize
+./configure --enable-terminal
+make
+make test
+```
+
+Then try the prompt example:
+
+```sh
+php -d extension=modules/terminal.so examples/prompt.php
+```
+
+For installed builds, use your normal `extension=terminal` configuration instead of `-d extension=...`.
+
+Feedback for this alpha release is tracked in:
+
+https://github.com/prateekbhujel/php-terminal/issues/16
+
 ## Build
 
 ### Unix-like systems
