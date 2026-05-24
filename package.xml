@@ -10,7 +10,7 @@
     <summary>Cross-platform terminal helpers for PHP CLI.</summary>
     <description>
         The terminal extension exposes a small cross-platform terminal capability layer for PHP CLI programs.
-        It currently provides backend detection, TTY checks, ANSI capability checks, terminal size lookup, direct writes to stdout/stderr, raw-mode save/restore helpers, and a shared key-input API shape for Unix-like systems and Windows.
+        It currently provides backend detection, TTY checks, ANSI capability checks, terminal size lookup, direct writes to stdout/stderr, raw-mode save/restore helpers, and POSIX key input.
     </description>
     <lead>
         <name>Pratik Bhujel</name>
@@ -18,7 +18,7 @@
         <email>prateekbhujelpb@gmail.com</email>
         <active>yes</active>
     </lead>
-    <date>2026-05-23</date>
+    <date>2026-05-24</date>
     <version>
         <release>0.1.0dev</release>
         <api>0.1.0dev</api>
@@ -30,7 +30,7 @@
     <license uri="https://www.php.net/license/3_01.txt">PHP License</license>
     <notes>
         - First public development cut.
-        - Added backend detection, TTY detection, ANSI detection, terminal sizing, stream writes, raw-mode save/restore, and key-input API shape.
+        - Added backend detection, TTY detection, ANSI detection, terminal sizing, stream writes, raw-mode save/restore, and POSIX key input.
         - Added Unix and Windows build support.
     </notes>
     <contents>

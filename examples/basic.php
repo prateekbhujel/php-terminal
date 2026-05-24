@@ -14,5 +14,9 @@ var_dump(terminal_write("hello from terminal\n"));
 $mode = terminal_enable_raw_mode();
 var_dump($mode === false || is_string($mode));
 if (is_string($mode)) {
-	var_dump(terminal_restore_mode($mode));
+	try {
+		var_dump(terminal_read_key(0.5));
+	} finally {
+		var_dump(terminal_restore_mode($mode));
+	}
 }
