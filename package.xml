@@ -46,6 +46,7 @@
             <file name="terminal_arginfo.h" role="src" />
             <dir name="examples">
                 <file name="basic.php" role="doc" />
+                <file name="prompt.php" role="doc" />
             </dir>
             <dir name="tests">
                 <file name="001.phpt" role="test" />

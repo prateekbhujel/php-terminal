@@ -96,4 +96,4 @@ if (is_string($mode)) {
 }
 ```
 
-There is also a runnable example in [`examples/basic.php`](./examples/basic.php).
+There are runnable examples in [`examples/basic.php`](./examples/basic.php) and [`examples/prompt.php`](./examples/prompt.php).
