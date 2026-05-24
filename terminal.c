@@ -41,6 +41,16 @@ static zend_always_inline bool terminal_valid_stream(zend_long stream)
 	return stream >= TERMINAL_STREAM_STDIN && stream <= TERMINAL_STREAM_STDERR;
 }
 
+static zend_string *terminal_key_string(const char *key)
+{
+	return zend_string_init(key, strlen(key), false);
+}
+
+static zend_string *terminal_key_char(unsigned char key)
+{
+	return zend_string_init((const char *) &key, 1, false);
+}
+
 #ifdef PHP_WIN32
 static HANDLE terminal_handle_from_id(zend_long stream)
 {
@@ -152,6 +162,159 @@ static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
 	return handle != INVALID_HANDLE_VALUE
 		&& handle != NULL
 		&& SetConsoleMode(handle, saved->mode);
+}
+
+static DWORD terminal_timeout_to_wait_ms(double timeout, bool timeout_is_null)
+{
+	double timeout_ms;
+	DWORD timeout_ms_dword;
+
+	if (timeout_is_null) {
+		return INFINITE;
+	}
+
+	if (timeout <= 0) {
+		return 0;
+	}
+
+	timeout_ms = timeout * 1000;
+	if (timeout_ms >= (double) (INFINITE - 1)) {
+		return INFINITE - 1;
+	}
+
+	if (timeout_ms < 1) {
+		return 1;
+	}
+
+	timeout_ms_dword = (DWORD) timeout_ms;
+
+	return timeout_ms_dword < timeout_ms ? timeout_ms_dword + 1 : timeout_ms_dword;
+}
+
+static DWORD terminal_remaining_wait_ms(ULONGLONG deadline_ms)
+{
+	ULONGLONG now_ms = GetTickCount64();
+
+	if (now_ms >= deadline_ms) {
+		return 0;
+	}
+
+	if (deadline_ms - now_ms >= (ULONGLONG) (INFINITE - 1)) {
+		return INFINITE - 1;
+	}
+
+	return (DWORD) (deadline_ms - now_ms);
+}
+
+static zend_string *terminal_key_from_virtual_key(WORD key)
+{
+	switch (key) {
+		case VK_UP:
+			return terminal_key_string("up");
+		case VK_DOWN:
+			return terminal_key_string("down");
+		case VK_RIGHT:
+			return terminal_key_string("right");
+		case VK_LEFT:
+			return terminal_key_string("left");
+		case VK_RETURN:
+			return terminal_key_string("enter");
+		case VK_BACK:
+			return terminal_key_string("backspace");
+		case VK_ESCAPE:
+			return terminal_key_string("escape");
+		case VK_TAB:
+			return terminal_key_string("tab");
+		case VK_HOME:
+			return terminal_key_string("home");
+		case VK_END:
+			return terminal_key_string("end");
+		case VK_DELETE:
+			return terminal_key_string("delete");
+		case VK_PRIOR:
+			return terminal_key_string("pageup");
+		case VK_NEXT:
+			return terminal_key_string("pagedown");
+	}
+
+	return NULL;
+}
+
+static zend_string *terminal_key_from_wchar(WCHAR key)
+{
+	char buffer[8];
+	int buffer_len;
+
+	if (key == L'\0') {
+		return NULL;
+	}
+
+	if (key <= 0x7f) {
+		return terminal_key_char((unsigned char) key);
+	}
+
+	buffer_len = WideCharToMultiByte(CP_UTF8, 0, &key, 1, buffer, sizeof(buffer), NULL, NULL);
+	if (buffer_len <= 0) {
+		return NULL;
+	}
+
+	return zend_string_init(buffer, (size_t) buffer_len, false);
+}
+
+static zend_string *terminal_key_from_input_record(const KEY_EVENT_RECORD *key)
+{
+	zend_string *named_key = terminal_key_from_virtual_key(key->wVirtualKeyCode);
+
+	if (named_key != NULL) {
+		return named_key;
+	}
+
+	return terminal_key_from_wchar(key->uChar.UnicodeChar);
+}
+
+static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null)
+{
+	HANDLE handle = terminal_handle_from_id(TERMINAL_STREAM_STDIN);
+	DWORD mode;
+	DWORD wait_ms = terminal_timeout_to_wait_ms(timeout, timeout_is_null);
+	ULONGLONG deadline_ms = wait_ms == INFINITE ? 0 : GetTickCount64() + wait_ms;
+
+	if (handle == INVALID_HANDLE_VALUE || handle == NULL || !GetConsoleMode(handle, &mode)) {
+		return NULL;
+	}
+
+	for (;;) {
+		INPUT_RECORD record;
+		DWORD records_read;
+		DWORD wait_result = WaitForSingleObject(handle, wait_ms);
+
+		if (wait_result == WAIT_TIMEOUT) {
+			return NULL;
+		}
+
+		if (wait_result != WAIT_OBJECT_0) {
+			return NULL;
+		}
+
+		if (!ReadConsoleInputW(handle, &record, 1, &records_read) || records_read != 1) {
+			return NULL;
+		}
+
+		if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown) {
+			zend_string *key = terminal_key_from_input_record(&record.Event.KeyEvent);
+
+			if (key != NULL) {
+				return key;
+			}
+		}
+
+		if (!timeout_is_null) {
+			wait_ms = terminal_remaining_wait_ms(deadline_ms);
+			if (wait_ms == 0) {
+				return NULL;
+			}
+		}
+	}
 }
 #else
 static int terminal_fd_from_id(zend_long stream)
@@ -404,16 +567,6 @@ static int terminal_read_byte(int fd, unsigned char *byte, int timeout_ms)
 
 		return 0;
 	}
-}
-
-static zend_string *terminal_key_string(const char *key)
-{
-	return zend_string_init(key, strlen(key), false);
-}
-
-static zend_string *terminal_key_char(unsigned char key)
-{
-	return zend_string_init((const char *) &key, 1, false);
 }
 
 static zend_string *terminal_key_from_csi_sequence(const unsigned char *sequence, size_t sequence_len)
@@ -716,7 +869,15 @@ PHP_FUNCTION(terminal_read_key)
 		RETURN_THROWS();
 	}
 
-#ifndef PHP_WIN32
+#ifdef PHP_WIN32
+	{
+		zend_string *key = terminal_read_stdin_key(timeout, timeout_is_null);
+
+		if (key != NULL) {
+			RETURN_STR(key);
+		}
+	}
+#else
 	{
 		zend_string *key = terminal_read_stdin_key(timeout, timeout_is_null);
 

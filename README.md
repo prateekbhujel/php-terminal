@@ -17,7 +17,7 @@ The first cut stays small on purpose. It exposes the pieces that are awkward to 
 
 `terminal_write()` accepts `TERMINAL_STDOUT` and `TERMINAL_STDERR`.
 `terminal_enable_raw_mode()` currently accepts `TERMINAL_STDIN` and returns an opaque mode token that should be passed back to `terminal_restore_mode()`.
-`terminal_read_key()` returns printable keys as-is, named keys as strings like `up`, `down`, `left`, `right`, `enter`, `backspace`, `escape`, and `tab`, and `false` when no key is available before the timeout. The POSIX backend is implemented; the Windows key-input backend is still pending.
+`terminal_read_key()` returns printable keys as-is, named keys as strings like `up`, `down`, `left`, `right`, `enter`, `backspace`, `escape`, and `tab`, and `false` when no key is available before the timeout.
 
 Constants:
 
