@@ -17,3 +17,5 @@ function terminal_write(string $data, int $stream = TERMINAL_STDOUT): int|false 
 function terminal_enable_raw_mode(int $stream = TERMINAL_STDIN): string|false {}
 
 function terminal_restore_mode(string $mode): bool {}
+
+function terminal_read_key(?float $timeout = null): string|false {}
