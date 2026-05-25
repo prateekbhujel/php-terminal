@@ -135,11 +135,17 @@ git clone https://github.com/prateekbhujel/php-terminal.git
 cd php-terminal
 
 /Applications/XAMPP/xamppfiles/bin/phpize
+XAMPP_ARCH=$(/Applications/XAMPP/xamppfiles/bin/php -r 'echo php_uname("m");')
+CFLAGS="-arch ${XAMPP_ARCH}" \
+LDFLAGS="-arch ${XAMPP_ARCH}" \
 ./configure --with-php-config=/Applications/XAMPP/xamppfiles/bin/php-config --enable-terminal
 make
 make test
 sudo make install
 ```
+
+The `XAMPP_ARCH` step matters on Apple Silicon when XAMPP's PHP runs as `x86_64` under Rosetta.
+Without matching that architecture, macOS may build an `arm64` `terminal.so` that XAMPP PHP cannot load.
 
 Then edit:
 
