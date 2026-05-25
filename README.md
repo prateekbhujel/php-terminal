@@ -29,6 +29,8 @@ Constants:
 
 PHP already has useful pieces such as `stream_isatty()` and `sapi_windows_vt100_support()`, but there is still no small extension that exposes a shared terminal capability layer across Unix and Windows.
 
+The main goal is native Windows parity for PHP CLI prompts and terminal apps. Users should not need WSL just to get arrow keys, raw mode, terminal size, and safe restore behavior that already work on macOS and Linux.
+
 Older console-oriented extensions took different paths:
 
 - `ncurses` and `termbox` wrap external terminal libraries
@@ -62,20 +64,29 @@ The `v0.1.0` alpha release is available at:
 
 https://github.com/prateekbhujel/php-terminal/releases/tag/v0.1.0
 
-Windows builds are attached for PHP 8.2-8.5, x64, TS/NTS. Pick the zip that matches your PHP version and thread-safety mode, copy `php_terminal.dll` into your PHP extension directory, and enable it with:
+Windows builds are attached for PHP 8.2-8.5, x64, TS/NTS. These are native Windows builds for normal Windows PHP runtimes, not WSL. Pick the zip that matches your PHP version and thread-safety mode, copy `php_terminal.dll` into your PHP extension directory, and enable it with:
 
 ```ini
 extension=php_terminal.dll
 ```
 
-### XAMPP on Windows
+### Windows PHP distributions
 
-XAMPP works as long as the DLL matches the PHP build bundled with your XAMPP install.
+XAMPP, MAMP, WAMP, Laragon, Herd, and plain downloaded PHP builds work as long as the DLL matches the PHP build your app actually runs.
+
+Example PHP binaries:
+
+- XAMPP: `C:\xampp\php\php.exe`
+- MAMP: `C:\MAMP\bin\php\php8.x.x\php.exe`
+- Laragon: `C:\laragon\bin\php\php-8.x.x\php.exe`
+- Plain PHP zip: `C:\php\php.exe`
 
 Check the PHP version, thread-safety mode, architecture, and compiler:
 
 ```bat
-C:\xampp\php\php.exe -i | findstr /C:"PHP Version" /C:"Thread Safety" /C:"Architecture" /C:"Compiler"
+set PHP_BIN=C:\xampp\php\php.exe
+%PHP_BIN% -i | findstr /C:"PHP Version" /C:"Thread Safety" /C:"Architecture" /C:"Compiler"
+%PHP_BIN% --ini
 ```
 
 Download the matching zip from the release page. For example:
@@ -84,7 +95,7 @@ Download the matching zip from the release page. For example:
 - PHP 8.2, thread safety enabled: `php_terminal-v0.1.0-8.2-ts-vs16-x86_64.zip`
 - PHP 8.4, thread safety disabled: `php_terminal-v0.1.0-8.4-nts-vs17-x86_64.zip`
 
-Copy `php_terminal.dll` into:
+Copy `php_terminal.dll` into that PHP installation's extension directory, for example:
 
 ```text
 C:\xampp\php\ext
@@ -105,9 +116,11 @@ extension=php_terminal.dll
 Test it with XAMPP's CLI PHP:
 
 ```bat
-C:\xampp\php\php.exe -m | findstr terminal
-C:\xampp\php\php.exe examples\prompt.php
+%PHP_BIN% -m | findstr terminal
+%PHP_BIN% examples\prompt.php
 ```
+
+Once enabled in that PHP runtime, any CLI app using the same `php.exe` can detect and use `terminal`. The app or framework still needs integration code; the extension provides the native Windows terminal primitives.
 
 On Unix-like systems, build from source for now:
 
@@ -126,34 +139,52 @@ php -d extension=modules/terminal.so examples/prompt.php
 
 For installed builds, use your normal `extension=terminal` configuration instead of `-d extension=...`.
 
-### XAMPP on macOS
+### Install into a specific PHP distribution
 
-There is no prebuilt XAMPP macOS binary yet. Build it with XAMPP's PHP tools:
+Each PHP installation has its own extension directory and `php.ini`. Build `terminal` with the `phpize` and `php-config` that belong to the PHP binary your application actually runs.
+
+Example target PHP binaries:
+
+- XAMPP on macOS: `/Applications/XAMPP/xamppfiles/bin/php`
+- MAMP on macOS: `/Applications/MAMP/bin/php/php8.x.x/bin/php`
+- LAMPP/XAMPP on Linux: `/opt/lampp/bin/php`
+- Homebrew or system PHP: `$(command -v php)`
+
+Build for that target PHP:
 
 ```sh
 git clone https://github.com/prateekbhujel/php-terminal.git
 cd php-terminal
 
-/Applications/XAMPP/xamppfiles/bin/phpize
-XAMPP_ARCH=$(/Applications/XAMPP/xamppfiles/bin/php -r 'echo php_uname("m");')
-CFLAGS="-arch ${XAMPP_ARCH}" \
-LDFLAGS="-arch ${XAMPP_ARCH}" \
-./configure --with-php-config=/Applications/XAMPP/xamppfiles/bin/php-config --enable-terminal
+PHP_BIN=/Applications/XAMPP/xamppfiles/bin/php
+PHPIZE="$(dirname "${PHP_BIN}")/phpize"
+PHP_CONFIG="$(dirname "${PHP_BIN}")/php-config"
+
+"${PHPIZE}"
+
+if [ "$(uname -s)" = "Darwin" ]; then
+    PHP_ARCH=$("${PHP_BIN}" -r 'echo php_uname("m");')
+    CFLAGS="-arch ${PHP_ARCH}" \
+    LDFLAGS="-arch ${PHP_ARCH}" \
+    ./configure --with-php-config="${PHP_CONFIG}" --enable-terminal
+else
+    ./configure --with-php-config="${PHP_CONFIG}" --enable-terminal
+fi
+
 make
 make test
 sudo make install
 ```
 
-The `XAMPP_ARCH` step matters on Apple Silicon when XAMPP's PHP runs as `x86_64` under Rosetta.
-Without matching that architecture, macOS may build an `arm64` `terminal.so` that XAMPP PHP cannot load.
+The macOS architecture step matters on Apple Silicon when a PHP distribution runs as `x86_64` under Rosetta. Without matching that architecture, macOS may build an `arm64` `terminal.so` that the target PHP cannot load.
 
-Then edit:
+Find the right `php.ini`:
 
-```text
-/Applications/XAMPP/xamppfiles/etc/php.ini
+```sh
+"${PHP_BIN}" --ini
 ```
 
-Add:
+Add this to that PHP installation's loaded `php.ini`:
 
 ```ini
 extension=terminal.so
@@ -162,15 +193,19 @@ extension=terminal.so
 Test it:
 
 ```sh
-/Applications/XAMPP/xamppfiles/bin/php -m | grep terminal
-/Applications/XAMPP/xamppfiles/bin/php examples/prompt.php
+"${PHP_BIN}" -m | grep terminal
+"${PHP_BIN}" examples/prompt.php
 ```
+
+Once enabled there, any PHP application using that same PHP binary can use `terminal`. If another app uses a different PHP binary, build/install the extension for that PHP too.
 
 ## Laravel Prompts and similar tools
 
-The goal is to let Laravel Prompts behave on Windows the same way it behaves on macOS and Linux.
+The goal is to let Laravel Prompts and similar prompt libraries behave on native Windows the same way they behave on macOS and Linux.
 
 This extension is the native terminal layer for that. It does not monkey-patch Laravel Prompts, Symfony Console, or any other CLI framework by itself. Frameworks still need to opt in, but the hard part is exposed through one API: raw mode, safe terminal restore, single-key reads, terminal size, direct writes, and shared Unix/Windows key names.
+
+That means the end-user path should be: install the matching Windows `php_terminal.dll`, enable it in the PHP used by the app, install or use an adapter that detects `terminal`, then run prompts from PowerShell, Command Prompt, or Windows Terminal without WSL.
 
 A Laravel Prompts adapter would keep Laravel's existing prompt code, but swap the terminal backend when this extension is available:
 
