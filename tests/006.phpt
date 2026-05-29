@@ -1,5 +1,5 @@
 --TEST--
-terminal_read_key reads from a pseudo terminal
+terminal_read_key reads common keys from a pseudo terminal
 --EXTENSIONS--
 terminal
 --SKIPIF--
@@ -76,16 +76,44 @@ function read_key_from_child(string $input, float $timeout): string
     return $output;
 }
 
-$printable = read_key_from_child('a', 1.0);
-echo str_contains($printable, 'string(1) "a"') ? "printable\n" : $printable;
+$cases = [
+    'printable' => ['a', 'string(1) "a"'],
+    'enter' => ["\n", 'string(5) "enter"'],
+    'tab' => ["\t", 'string(3) "tab"'],
+    'backspace' => ["\x7f", 'string(9) "backspace"'],
+    'escape' => ["\033", 'string(6) "escape"'],
+    'up' => ["\033[A", 'string(2) "up"'],
+    'down' => ["\033[B", 'string(4) "down"'],
+    'right' => ["\033[C", 'string(5) "right"'],
+    'left' => ["\033[D", 'string(4) "left"'],
+    'home' => ["\033[H", 'string(4) "home"'],
+    'end' => ["\033[F", 'string(3) "end"'],
+    'delete' => ["\033[3~", 'string(6) "delete"'],
+    'pageup' => ["\033[5~", 'string(6) "pageup"'],
+    'pagedown' => ["\033[6~", 'string(8) "pagedown"'],
+];
 
-$arrow = read_key_from_child("\033[A", 1.0);
-echo str_contains($arrow, 'string(2) "up"') ? "arrow\n" : $arrow;
+foreach ($cases as $name => [$input, $expected]) {
+    $output = read_key_from_child($input, 1.0);
+    echo str_contains($output, $expected) ? "$name\n" : $output;
+}
 
 $timeout = read_key_from_child('', 0.05);
 echo str_contains($timeout, 'bool(false)') ? "timeout\n" : $timeout;
 ?>
 --EXPECT--
 printable
-arrow
+enter
+tab
+backspace
+escape
+up
+down
+right
+left
+home
+end
+delete
+pageup
+pagedown
 timeout
