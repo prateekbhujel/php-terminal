@@ -176,6 +176,9 @@ make test
 sudo make install
 ```
 
+Build from a path without spaces. The PHP extension build tooling rejects
+whitespace in the build path before `configure` runs.
+
 The macOS architecture step matters on Apple Silicon when a PHP distribution runs as `x86_64` under Rosetta. Without matching that architecture, macOS may build an `arm64` `terminal.so` that the target PHP cannot load.
 
 Find the right `php.ini`:
