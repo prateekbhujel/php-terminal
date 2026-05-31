@@ -114,19 +114,36 @@ static bool terminal_stream_size(zend_long stream, zend_long *columns, zend_long
 static bool terminal_stream_write(zend_long stream, const char *buffer, size_t buffer_len, zend_long *written)
 {
 	HANDLE handle = terminal_handle_from_id(stream);
-	DWORD out = 0;
+	size_t total = 0;
 
 	if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
 		return false;
 	}
 
-	if (!WriteFile(handle, buffer, (DWORD) buffer_len, &out, NULL)) {
-		return false;
+	while (total < buffer_len) {
+		DWORD chunk_len = buffer_len - total > MAXDWORD ? MAXDWORD : (DWORD) (buffer_len - total);
+		DWORD chunk_written = 0;
+
+		if (!WriteFile(handle, buffer + total, chunk_len, &chunk_written, NULL)) {
+			return false;
+		}
+
+		if (chunk_written == 0) {
+			return false;
+		}
+
+		total += (size_t) chunk_written;
 	}
 
-	*written = (zend_long) out;
+	*written = (zend_long) total;
 
 	return true;
+}
+
+static DWORD terminal_make_raw_mode(DWORD mode)
+{
+	/* ReadConsoleInputW returns key events directly, so VT input is not required here. */
+	return mode & ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
 }
 
 static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mode *saved)
@@ -139,9 +156,7 @@ static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mod
 		return false;
 	}
 
-	raw_mode = mode;
-	raw_mode &= ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
-	raw_mode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+	raw_mode = terminal_make_raw_mode(mode);
 
 	if (!SetConsoleMode(handle, raw_mode)) {
 		return false;
@@ -276,10 +291,17 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 {
 	HANDLE handle = terminal_handle_from_id(TERMINAL_STREAM_STDIN);
 	DWORD mode;
+	DWORD raw_mode;
 	DWORD wait_ms = terminal_timeout_to_wait_ms(timeout, timeout_is_null);
 	ULONGLONG deadline_ms = wait_ms == INFINITE ? 0 : GetTickCount64() + wait_ms;
+	zend_string *result = NULL;
 
 	if (handle == INVALID_HANDLE_VALUE || handle == NULL || !GetConsoleMode(handle, &mode)) {
+		return NULL;
+	}
+
+	raw_mode = terminal_make_raw_mode(mode);
+	if (!SetConsoleMode(handle, raw_mode)) {
 		return NULL;
 	}
 
@@ -289,32 +311,43 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 		DWORD wait_result = WaitForSingleObject(handle, wait_ms);
 
 		if (wait_result == WAIT_TIMEOUT) {
-			return NULL;
+			break;
 		}
 
 		if (wait_result != WAIT_OBJECT_0) {
-			return NULL;
+			break;
 		}
 
 		if (!ReadConsoleInputW(handle, &record, 1, &records_read) || records_read != 1) {
-			return NULL;
+			break;
 		}
 
 		if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown) {
 			zend_string *key = terminal_key_from_input_record(&record.Event.KeyEvent);
 
 			if (key != NULL) {
-				return key;
+				result = key;
+				break;
 			}
 		}
 
 		if (!timeout_is_null) {
 			wait_ms = terminal_remaining_wait_ms(deadline_ms);
 			if (wait_ms == 0) {
-				return NULL;
+				break;
 			}
 		}
 	}
+
+	if (!SetConsoleMode(handle, mode)) {
+		if (result != NULL) {
+			zend_string_release(result);
+		}
+
+		return NULL;
+	}
+
+	return result;
 }
 #else
 static int terminal_fd_from_id(zend_long stream)
@@ -393,6 +426,10 @@ static bool terminal_stream_write(zend_long stream, const char *buffer, size_t b
 			return false;
 		}
 
+		if (chunk == 0) {
+			return false;
+		}
+
 		total += (size_t) chunk;
 	}
 
@@ -413,7 +450,7 @@ static void terminal_make_raw_mode(struct termios *mode)
 #endif
 
 	mode->c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
-	mode->c_oflag &= ~OPOST;
+	/* Keep output processing enabled so prompt output such as "\n" remains usable. */
 	mode->c_lflag &= ~lflag;
 	mode->c_cflag &= ~(CSIZE | PARENB);
 	mode->c_cflag |= CS8;
@@ -639,6 +676,48 @@ static zend_string *terminal_key_from_escape_sequence(int fd)
 	return terminal_key_from_csi_sequence(sequence + 1, sequence_len - 1);
 }
 
+static size_t terminal_utf8_sequence_len(unsigned char key)
+{
+	if (key >= 0xc2 && key <= 0xdf) {
+		return 2;
+	}
+
+	if (key >= 0xe0 && key <= 0xef) {
+		return 3;
+	}
+
+	if (key >= 0xf0 && key <= 0xf4) {
+		return 4;
+	}
+
+	return 1;
+}
+
+static zend_string *terminal_key_from_utf8_sequence(int fd, unsigned char key)
+{
+	unsigned char sequence[4] = { key };
+	size_t sequence_len = terminal_utf8_sequence_len(key);
+	size_t i;
+
+	if (sequence_len == 1) {
+		return terminal_key_char(key);
+	}
+
+	for (i = 1; i < sequence_len; i++) {
+		int result = terminal_read_byte(fd, &sequence[i], TERMINAL_ESCAPE_TIMEOUT_MS);
+
+		if (result != 1) {
+			return zend_string_init((const char *) sequence, i, false);
+		}
+
+		if ((sequence[i] & 0xc0) != 0x80) {
+			return zend_string_init((const char *) sequence, i + 1, false);
+		}
+	}
+
+	return zend_string_init((const char *) sequence, sequence_len, false);
+}
+
 static zend_string *terminal_key_from_byte(int fd, unsigned char key)
 {
 	switch (key) {
@@ -653,7 +732,7 @@ static zend_string *terminal_key_from_byte(int fd, unsigned char key)
 		case 0x1b:
 			return terminal_key_from_escape_sequence(fd);
 		default:
-			return terminal_key_char(key);
+			return terminal_key_from_utf8_sequence(fd, key);
 	}
 }
 
