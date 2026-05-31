@@ -129,6 +129,12 @@ static bool terminal_stream_write(zend_long stream, const char *buffer, size_t b
 	return true;
 }
 
+static DWORD terminal_make_raw_mode(DWORD mode)
+{
+	/* ReadConsoleInputW returns key events directly, so VT input is not required here. */
+	return mode & ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
+}
+
 static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mode *saved)
 {
 	HANDLE handle = terminal_handle_from_id(stream);
@@ -139,9 +145,7 @@ static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mod
 		return false;
 	}
 
-	raw_mode = mode;
-	raw_mode &= ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
-	raw_mode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+	raw_mode = terminal_make_raw_mode(mode);
 
 	if (!SetConsoleMode(handle, raw_mode)) {
 		return false;
@@ -276,10 +280,17 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 {
 	HANDLE handle = terminal_handle_from_id(TERMINAL_STREAM_STDIN);
 	DWORD mode;
+	DWORD raw_mode;
 	DWORD wait_ms = terminal_timeout_to_wait_ms(timeout, timeout_is_null);
 	ULONGLONG deadline_ms = wait_ms == INFINITE ? 0 : GetTickCount64() + wait_ms;
+	zend_string *result = NULL;
 
 	if (handle == INVALID_HANDLE_VALUE || handle == NULL || !GetConsoleMode(handle, &mode)) {
+		return NULL;
+	}
+
+	raw_mode = terminal_make_raw_mode(mode);
+	if (!SetConsoleMode(handle, raw_mode)) {
 		return NULL;
 	}
 
@@ -289,32 +300,43 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 		DWORD wait_result = WaitForSingleObject(handle, wait_ms);
 
 		if (wait_result == WAIT_TIMEOUT) {
-			return NULL;
+			break;
 		}
 
 		if (wait_result != WAIT_OBJECT_0) {
-			return NULL;
+			break;
 		}
 
 		if (!ReadConsoleInputW(handle, &record, 1, &records_read) || records_read != 1) {
-			return NULL;
+			break;
 		}
 
 		if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown) {
 			zend_string *key = terminal_key_from_input_record(&record.Event.KeyEvent);
 
 			if (key != NULL) {
-				return key;
+				result = key;
+				break;
 			}
 		}
 
 		if (!timeout_is_null) {
 			wait_ms = terminal_remaining_wait_ms(deadline_ms);
 			if (wait_ms == 0) {
-				return NULL;
+				break;
 			}
 		}
 	}
+
+	if (!SetConsoleMode(handle, mode)) {
+		if (result != NULL) {
+			zend_string_release(result);
+		}
+
+		return NULL;
+	}
+
+	return result;
 }
 #else
 static int terminal_fd_from_id(zend_long stream)
@@ -413,7 +435,7 @@ static void terminal_make_raw_mode(struct termios *mode)
 #endif
 
 	mode->c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
-	mode->c_oflag &= ~OPOST;
+	/* Keep output processing enabled so prompt output such as "\n" remains usable. */
 	mode->c_lflag &= ~lflag;
 	mode->c_cflag &= ~(CSIZE | PARENB);
 	mode->c_cflag |= CS8;

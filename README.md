@@ -17,7 +17,8 @@ The first cut stays small on purpose. It exposes the pieces that are awkward to 
 
 `terminal_write()` accepts `TERMINAL_STDOUT` and `TERMINAL_STDERR`.
 `terminal_enable_raw_mode()` currently accepts `TERMINAL_STDIN` and returns an opaque mode token that should be passed back to `terminal_restore_mode()`.
-`terminal_read_key()` returns printable keys as-is, named keys as strings like `up`, `down`, `left`, `right`, `enter`, `backspace`, `escape`, and `tab`, and `false` when no key is available before the timeout.
+`terminal_enable_raw_mode()` leaves terminal output processing intact, so normal prompt output such as `"\n"` keeps working while input is read one key at a time.
+`terminal_read_key()` temporarily prepares standard input for key reads, returns printable keys as-is, named keys as strings like `up`, `down`, `left`, `right`, `enter`, `backspace`, `escape`, and `tab`, restores the previous mode before returning, and returns `false` when no key is available before the timeout.
 
 Constants:
 

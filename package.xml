@@ -55,6 +55,7 @@
                 <file name="004.phpt" role="test" />
                 <file name="005.phpt" role="test" />
                 <file name="006.phpt" role="test" />
+                <file name="007.phpt" role="test" />
             </dir>
         </dir>
     </contents>
