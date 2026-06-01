@@ -9,16 +9,20 @@ The first cut stays small on purpose. It exposes the pieces that are awkward to 
 - `terminal_backend(): string`
 - `terminal_is_tty(int $stream = TERMINAL_STDOUT): bool`
 - `terminal_supports_ansi(int $stream = TERMINAL_STDOUT): bool`
+- `terminal_enable_ansi(int $stream = TERMINAL_STDOUT): bool`
 - `terminal_get_size(int $stream = TERMINAL_STDOUT): array{columns:int, rows:int}|false`
 - `terminal_write(string $data, int $stream = TERMINAL_STDOUT): int|false`
 - `terminal_enable_raw_mode(int $stream = TERMINAL_STDIN): string|false`
 - `terminal_restore_mode(string $mode): bool`
 - `terminal_read_key(?float $timeout = null): string|false`
+- `terminal_read_secret(?float $timeout = null): string|false`
 
+`terminal_enable_ansi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals.
 `terminal_write()` accepts `TERMINAL_STDOUT` and `TERMINAL_STDERR`.
 `terminal_enable_raw_mode()` currently accepts `TERMINAL_STDIN` and returns an opaque mode token that should be passed back to `terminal_restore_mode()`.
 `terminal_enable_raw_mode()` leaves terminal output processing intact, so normal prompt output such as `"\n"` keeps working while input is read one key at a time.
 `terminal_read_key()` temporarily prepares standard input for key reads, returns printable keys as-is including UTF-8 input, named keys as strings like `up`, `down`, `left`, `right`, `enter`, `backspace`, `escape`, and `tab`, restores the previous mode before returning, and returns `false` when no key is available before the timeout.
+`terminal_read_secret()` reads a hidden line from standard input, restores the previous mode before returning, handles backspace and UTF-8 input, and returns `false` on timeout or abort.
 
 Constants:
 
@@ -31,6 +35,8 @@ Constants:
 PHP already has useful pieces such as `stream_isatty()` and `sapi_windows_vt100_support()`, but there is still no small extension that exposes a shared terminal capability layer across Unix and Windows.
 
 The main goal is native Windows parity for PHP CLI prompts and terminal apps. Users should not need WSL just to get arrow keys, raw mode, terminal size, and safe restore behavior that already work on macOS and Linux.
+
+This also removes two common framework workarounds: spawning `stty`/`mode CON` helpers for terminal state, and bundling a Windows-only helper executable just to read hidden password input.
 
 Older console-oriented extensions took different paths:
 
@@ -214,8 +220,10 @@ That means the end-user path should be: install the matching Windows `php_termin
 A Laravel Prompts adapter would keep Laravel's existing prompt code, but swap the terminal backend when this extension is available:
 
 - use `terminal_is_tty(TERMINAL_STDIN)` for interactivity checks
+- use `terminal_enable_ansi()` before rendering ANSI prompts on Windows
 - use `terminal_enable_raw_mode()` and `terminal_restore_mode()` instead of `stty`
 - use `terminal_read_key()` for input
+- use `terminal_read_secret()` for password/secret prompts instead of shelling out to platform-specific helpers
 - map extension key names back to Laravel Prompts' existing `Key::*` values
 - use `terminal_get_size()` for columns and rows
 
