@@ -8,6 +8,7 @@ if (!extension_loaded('terminal')) {
 var_dump(terminal_backend());
 var_dump(terminal_is_tty());
 var_dump(terminal_supports_ansi());
+var_dump(terminal_enable_ansi());
 var_dump(terminal_get_size());
 var_dump(terminal_write("hello from terminal\n"));
 
@@ -20,3 +21,7 @@ if (is_string($mode)) {
 		var_dump(terminal_restore_mode($mode));
 	}
 }
+
+terminal_write("Secret demo. Type a value and press Enter: ");
+$secret = terminal_read_secret(30);
+terminal_write("\nSecret length: " . (is_string($secret) ? strlen($secret) : 0) . "\n");
