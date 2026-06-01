@@ -65,11 +65,11 @@ extension=terminal
 extension=php_terminal.dll
 ```
 
-## Trying 0.1.0
+## Installing 0.2.0
 
-The `v0.1.0` alpha release is available at:
+The `v0.2.0` release is available at:
 
-https://github.com/prateekbhujel/php-terminal/releases/tag/v0.1.0
+https://github.com/prateekbhujel/php-terminal/releases/tag/v0.2.0
 
 Windows builds are attached for PHP 8.2-8.5, x64, TS/NTS. These are native Windows builds for normal Windows PHP runtimes, not WSL. Pick the zip that matches your PHP version and thread-safety mode, copy `php_terminal.dll` into your PHP extension directory, and enable it with:
 
@@ -98,9 +98,9 @@ set PHP_BIN=C:\xampp\php\php.exe
 
 Download the matching zip from the release page. For example:
 
-- PHP 8.2, thread safety disabled: `php_terminal-v0.1.0-8.2-nts-vs16-x86_64.zip`
-- PHP 8.2, thread safety enabled: `php_terminal-v0.1.0-8.2-ts-vs16-x86_64.zip`
-- PHP 8.4, thread safety disabled: `php_terminal-v0.1.0-8.4-nts-vs17-x86_64.zip`
+- PHP 8.2, thread safety disabled: `php_terminal-v0.2.0-8.2-nts-vs16-x86_64.zip`
+- PHP 8.2, thread safety enabled: `php_terminal-v0.2.0-8.2-ts-vs16-x86_64.zip`
+- PHP 8.4, thread safety disabled: `php_terminal-v0.2.0-8.4-nts-vs17-x86_64.zip`
 
 Copy `php_terminal.dll` into that PHP installation's extension directory, for example:
 
@@ -124,6 +124,7 @@ Test it with XAMPP's CLI PHP:
 
 ```bat
 %PHP_BIN% -m | findstr terminal
+%PHP_BIN% examples\doctor.php
 %PHP_BIN% examples\prompt.php
 ```
 
@@ -204,6 +205,7 @@ Test it:
 
 ```sh
 "${PHP_BIN}" -m | grep terminal
+"${PHP_BIN}" examples/doctor.php
 "${PHP_BIN}" examples/prompt.php
 ```
 
@@ -255,7 +257,7 @@ Laravel Prompts integration is tracked separately in:
 
 https://github.com/prateekbhujel/php-terminal/issues/18
 
-Feedback for this alpha release is tracked in:
+Feedback for this release is tracked in:
 
 https://github.com/prateekbhujel/php-terminal/issues/16
 
