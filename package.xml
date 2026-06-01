@@ -10,7 +10,7 @@
     <summary>Cross-platform terminal helpers for PHP CLI.</summary>
     <description>
         The terminal extension exposes a small cross-platform terminal capability layer for PHP CLI programs.
-        It currently provides backend detection, TTY checks, ANSI capability checks, terminal size lookup, direct writes to stdout/stderr, raw-mode save/restore helpers, and key input.
+        It currently provides backend detection, TTY checks, ANSI capability checks and enablement, terminal size lookup, direct writes to stdout/stderr, raw-mode save/restore helpers, key input, and hidden secret input.
     </description>
     <lead>
         <name>Pratik Bhujel</name>
@@ -18,24 +18,27 @@
         <email>prateekbhujelpb@gmail.com</email>
         <active>yes</active>
     </lead>
-    <date>2026-05-24</date>
+    <date>2026-06-01</date>
     <version>
-        <release>0.1.0</release>
-        <api>0.1.0</api>
+        <release>0.2.0</release>
+        <api>0.2.0</api>
     </version>
     <stability>
-        <release>alpha</release>
-        <api>alpha</api>
+        <release>stable</release>
+        <api>stable</api>
     </stability>
     <license uri="https://www.php.net/license/3_01.txt">PHP License</license>
     <notes>
-        - First public development cut.
-        - Added backend detection, TTY detection, ANSI detection, terminal sizing, stream writes, raw-mode save/restore, and key input.
-        - Added Unix and Windows build support.
+        - Production-oriented release for PHP CLI prompt/framework integration.
+        - Added ANSI/VT output enablement with terminal_enable_ansi().
+        - Added hidden password/secret input with terminal_read_secret().
+        - Hardened raw mode restore, UTF-8 key input, and stream writes.
+        - Expanded pseudo-terminal regression coverage.
     </notes>
     <contents>
         <dir name="/">
             <file name="CREDITS" role="doc" />
+            <file name="CHANGELOG.md" role="doc" />
             <file name="LICENSE" role="doc" />
             <file name="README.md" role="doc" />
             <file name="config.m4" role="src" />
@@ -46,6 +49,7 @@
             <file name="terminal_arginfo.h" role="src" />
             <dir name="examples">
                 <file name="basic.php" role="doc" />
+                <file name="doctor.php" role="doc" />
                 <file name="prompt.php" role="doc" />
             </dir>
             <dir name="tests">
