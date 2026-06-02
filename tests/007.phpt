@@ -1,5 +1,5 @@
 --TEST--
-terminal raw mode preserves output processing
+Terminal\Terminal raw mode preserves output processing
 --EXTENSIONS--
 terminal
 --SKIPIF--
@@ -37,14 +37,14 @@ proc_close($process);
 <?php
 $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
 $code = <<<'PHP'
-$mode = terminal_enable_raw_mode();
+$mode = Terminal\Terminal::enableRawMode();
 if (!is_string($mode)) {
     echo "raw-mode-unavailable\n";
     exit;
 }
 
 $output = shell_exec('stty -a <&0 2>&1');
-terminal_restore_mode($mode);
+Terminal\Terminal::restoreMode($mode);
 echo $output;
 PHP;
 

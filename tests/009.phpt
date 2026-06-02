@@ -1,5 +1,5 @@
 --TEST--
-terminal_read_secret reads hidden input from a pseudo terminal
+Terminal\Terminal::readSecret reads hidden input from a pseudo terminal
 --EXTENSIONS--
 terminal
 --SKIPIF--
@@ -36,7 +36,7 @@ function read_secret_from_child(string $input, float $timeout = 1.0): string
     $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
     $code = <<<'PHP'
 echo "ready\n";
-$secret = terminal_read_secret(%s);
+$secret = Terminal\Terminal::readSecret(%s);
 var_dump($secret === false ? false : bin2hex($secret));
 PHP;
     $command = escapeshellarg(PHP_BINARY) . ' -n -d extension=' . escapeshellarg($extension) . ' -r ' . escapeshellarg(sprintf($code, var_export($timeout, true)));
@@ -95,7 +95,7 @@ $timeout = read_secret_from_child('', 0.05);
 echo str_contains($timeout, 'bool(false)') ? "timeout\n" : $timeout;
 
 try {
-    terminal_read_secret(-1);
+    Terminal\Terminal::readSecret(-1);
 } catch (ValueError $e) {
     echo $e->getMessage(), "\n";
 }
@@ -105,4 +105,4 @@ ascii
 backspace
 utf8
 timeout
-terminal_read_secret(): Argument #1 ($timeout) must be greater than or equal to 0
+Terminal\Terminal::readSecret(): Argument #1 ($timeout) must be greater than or equal to 0

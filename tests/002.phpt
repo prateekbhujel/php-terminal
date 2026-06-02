@@ -1,27 +1,33 @@
 --TEST--
-terminal backend and constants
+Terminal backend and enum cases
 --EXTENSIONS--
 terminal
 --FILE--
 <?php
-$backend = terminal_backend();
-var_dump(in_array($backend, ['windows', 'posix'], true));
-var_dump(TERMINAL_STDIN);
-var_dump(TERMINAL_STDOUT);
-var_dump(TERMINAL_STDERR);
-var_dump(function_exists('terminal_enable_raw_mode'));
-var_dump(function_exists('terminal_restore_mode'));
-var_dump(function_exists('terminal_read_key'));
-var_dump(function_exists('terminal_enable_ansi'));
-var_dump(function_exists('terminal_read_secret'));
+use Terminal\Backend;
+use Terminal\Key;
+use Terminal\Stream;
+use Terminal\Terminal;
+
+$backend = Terminal::getBackend();
+
+var_dump($backend instanceof Backend);
+var_dump(in_array($backend, [Backend::Windows, Backend::Posix], true));
+var_dump(Stream::Stdin->value);
+var_dump(Stream::Stdout->value);
+var_dump(Stream::Stderr->value);
+var_dump(Key::Up->value);
+var_dump(Key::Enter->value);
+var_dump(class_exists(Terminal::class));
+var_dump(function_exists('terminal_backend'));
 ?>
 --EXPECT--
+bool(true)
 bool(true)
 int(0)
 int(1)
 int(2)
+string(2) "up"
+string(5) "enter"
 bool(true)
-bool(true)
-bool(true)
-bool(true)
-bool(true)
+bool(false)

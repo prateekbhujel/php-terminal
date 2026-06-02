@@ -1,5 +1,5 @@
 --TEST--
-Terminal\Terminal::readKey reads UTF-8 keys from a pseudo terminal
+Terminal\Terminal::readKey returns enum cases for special keys
 --EXTENSIONS--
 terminal
 --SKIPIF--
@@ -31,13 +31,17 @@ proc_close($process);
 ?>
 --FILE--
 <?php
-function read_key_hex_from_child(string $input): string
+function read_key_from_child(string $input): string
 {
     $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
     $code = <<<'PHP'
 echo "ready\n";
 $key = Terminal\Terminal::readKey(1.0);
-var_dump(is_string($key) ? bin2hex($key) : false);
+if ($key instanceof Terminal\Key) {
+    echo $key->name . ':' . $key->value . "\n";
+} else {
+    var_dump($key);
+}
 PHP;
     $command = escapeshellarg(PHP_BINARY) . ' -n -d extension=' . escapeshellarg($extension) . ' -r ' . escapeshellarg($code);
     $descriptors = [
@@ -79,17 +83,19 @@ PHP;
 }
 
 $cases = [
-    'two-byte' => ["\xc3\xa9", 'string(4) "c3a9"'],
-    'three-byte' => ["\xe2\x82\xac", 'string(6) "e282ac"'],
-    'four-byte' => ["\xf0\x9f\x98\x80", 'string(8) "f09f9880"'],
+    'printable' => ['a', 'string(1) "a"'],
+    'up' => ["\033[A", "Up:up"],
+    'enter' => ["\n", "Enter:enter"],
+    'backspace' => ["\x7f", "Backspace:backspace"],
 ];
 
 foreach ($cases as $name => [$input, $expected]) {
-    $output = read_key_hex_from_child($input);
+    $output = read_key_from_child($input);
     echo str_contains($output, $expected) ? "$name\n" : $output;
 }
 ?>
 --EXPECT--
-two-byte
-three-byte
-four-byte
+printable
+up
+enter
+backspace

@@ -4,22 +4,57 @@
  * @generate-class-entries
  */
 
-function terminal_backend(): string {}
+namespace Terminal;
 
-function terminal_is_tty(int $stream = TERMINAL_STDOUT): bool {}
+enum Backend: string
+{
+    case Posix = 'posix';
+    case Windows = 'windows';
+}
 
-function terminal_supports_ansi(int $stream = TERMINAL_STDOUT): bool {}
+enum Stream: int
+{
+    case Stdin = 0;
+    case Stdout = 1;
+    case Stderr = 2;
+}
 
-function terminal_enable_ansi(int $stream = TERMINAL_STDOUT): bool {}
+enum Key: string
+{
+    case Up = 'up';
+    case Down = 'down';
+    case Right = 'right';
+    case Left = 'left';
+    case Enter = 'enter';
+    case Backspace = 'backspace';
+    case Escape = 'escape';
+    case Tab = 'tab';
+    case Home = 'home';
+    case End = 'end';
+    case Delete = 'delete';
+    case PageUp = 'pageup';
+    case PageDown = 'pagedown';
+}
 
-function terminal_get_size(int $stream = TERMINAL_STDOUT): array|false {}
+final class Terminal
+{
+    public static function getBackend(): Backend {}
 
-function terminal_write(string $data, int $stream = TERMINAL_STDOUT): int|false {}
+    public static function isTty(Stream $stream = Stream::Stdout): bool {}
 
-function terminal_enable_raw_mode(int $stream = TERMINAL_STDIN): string|false {}
+    public static function supportsAnsi(Stream $stream = Stream::Stdout): bool {}
 
-function terminal_restore_mode(string $mode): bool {}
+    public static function enableAnsi(Stream $stream = Stream::Stdout): bool {}
 
-function terminal_read_key(?float $timeout = null): string|false {}
+    public static function getSize(Stream $stream = Stream::Stdout): array|false {}
 
-function terminal_read_secret(?float $timeout = null): string|false {}
+    public static function write(string $data, Stream $stream = Stream::Stdout): int|false {}
+
+    public static function enableRawMode(Stream $stream = Stream::Stdin): string|false {}
+
+    public static function restoreMode(string $mode): bool {}
+
+    public static function readKey(?float $timeout = null): Key|string|false {}
+
+    public static function readSecret(?float $timeout = null): string|false {}
+}

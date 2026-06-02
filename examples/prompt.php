@@ -1,11 +1,15 @@
 <?php
 
+use Terminal\Key;
+use Terminal\Stream;
+use Terminal\Terminal;
+
 if (!extension_loaded('terminal')) {
 	fwrite(STDERR, "terminal extension is not loaded\n");
 	exit(1);
 }
 
-if (!terminal_is_tty(TERMINAL_STDIN)) {
+if (!Terminal::isTty(Stream::Stdin)) {
 	fwrite(STDERR, "stdin is not a terminal\n");
 	exit(1);
 }
@@ -17,8 +21,8 @@ $options = [
 ];
 
 $selected = 0;
-$useAnsi = terminal_supports_ansi();
-$mode = terminal_enable_raw_mode();
+$useAnsi = Terminal::supportsAnsi();
+$mode = Terminal::enableRawMode();
 
 if (!is_string($mode)) {
 	fwrite(STDERR, "could not enable raw mode\n");
@@ -28,18 +32,18 @@ if (!is_string($mode)) {
 function render_prompt(array $options, int $selected, bool $useAnsi): void
 {
 	if ($useAnsi) {
-		terminal_write("\033[2J\033[H");
+		Terminal::write("\033[2J\033[H");
 	}
 
-	terminal_write("Pick an action. Use arrows or j/k, then Enter.\n\n");
+	Terminal::write("Pick an action. Use arrows or j/k, then Enter.\n\n");
 
 	foreach ($options as $index => $label) {
 		$prefix = $index === $selected ? '> ' : '  ';
 
 		if ($useAnsi && $index === $selected) {
-			terminal_write("\033[7m" . $prefix . $label . "\033[0m\n");
+			Terminal::write("\033[7m" . $prefix . $label . "\033[0m\n");
 		} else {
-			terminal_write($prefix . $label . "\n");
+			Terminal::write($prefix . $label . "\n");
 		}
 	}
 }
@@ -48,31 +52,31 @@ try {
 	render_prompt($options, $selected, $useAnsi);
 
 	while (true) {
-		$key = terminal_read_key();
+		$key = Terminal::readKey();
 
-		if ($key === 'up' || $key === 'k') {
+		if ($key === Key::Up || $key === 'k') {
 			$selected = ($selected + count($options) - 1) % count($options);
 			render_prompt($options, $selected, $useAnsi);
 			continue;
 		}
 
-		if ($key === 'down' || $key === 'j') {
+		if ($key === Key::Down || $key === 'j') {
 			$selected = ($selected + 1) % count($options);
 			render_prompt($options, $selected, $useAnsi);
 			continue;
 		}
 
-		if ($key === 'enter') {
+		if ($key === Key::Enter) {
 			break;
 		}
 
-		if ($key === 'escape' || $key === 'q') {
+		if ($key === Key::Escape || $key === 'q') {
 			$selected = count($options) - 1;
 			break;
 		}
 	}
 } finally {
-	terminal_restore_mode($mode);
+	Terminal::restoreMode($mode);
 }
 
-terminal_write("\nSelected: " . $options[$selected] . "\n");
+Terminal::write("\nSelected: " . $options[$selected] . "\n");

@@ -1,27 +1,30 @@
 --TEST--
-terminal raw mode helpers
+Terminal raw mode helpers
 --EXTENSIONS--
 terminal
 --FILE--
 <?php
+use Terminal\Stream;
+use Terminal\Terminal;
+
 try {
-    terminal_enable_raw_mode(TERMINAL_STDOUT);
+    Terminal::enableRawMode(Stream::Stdout);
 } catch (ValueError $e) {
     echo $e->getMessage(), "\n";
 }
 
 try {
-    terminal_restore_mode("bad-token");
+    Terminal::restoreMode("bad-token");
 } catch (ValueError $e) {
     echo $e->getMessage(), "\n";
 }
 
-$mode = terminal_enable_raw_mode();
+$mode = Terminal::enableRawMode();
 var_dump($mode === false || is_string($mode));
-var_dump($mode === false || terminal_restore_mode($mode));
+var_dump($mode === false || Terminal::restoreMode($mode));
 ?>
 --EXPECTF--
-terminal_enable_raw_mode(): Argument #1 ($stream) must be TERMINAL_STDIN
-terminal_restore_mode(): Argument #1 ($mode) must be a terminal mode token returned by terminal_enable_raw_mode()
+Terminal\Terminal::enableRawMode(): Argument #1 ($stream) must be Terminal\Stream::Stdin
+Terminal\Terminal::restoreMode(): Argument #1 ($mode) must be a terminal mode token returned by Terminal\Terminal::enableRawMode()
 bool(true)
 bool(true)
