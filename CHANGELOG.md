@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-06-02
 
 - Added `Terminal\Terminal` as the core-oriented API surface.
 - Added `Terminal\Backend`, `Terminal\Stream`, and `Terminal\Key` enums.
