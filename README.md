@@ -6,7 +6,9 @@ The first cut stays small on purpose. It exposes the pieces that are awkward to 
 
 Created and maintained by Pratik Bhujel.
 
-This README describes the current main-branch API. The released `v0.2.0` Windows artifacts still use the earlier procedural API; build from source for the enum API until the next release is cut.
+Current release: `v0.3.0`.
+
+`v0.3.0` is the first release with the `Terminal\Terminal` class and enum API. The older `v0.2.0` release used the first procedural `terminal_*()` API.
 
 ## Current API
 
@@ -99,11 +101,41 @@ extension=terminal
 extension=php_terminal.dll
 ```
 
-## Installing
+## Installing v0.3.0
 
-The enum API is currently source-first on `main`.
+The `v0.3.0` release is available at:
+
+https://github.com/prateekbhujel/php-terminal/releases/tag/v0.3.0
+
+Windows builds are attached for PHP 8.2-8.5, x64, TS/NTS. These are native Windows builds for normal Windows PHP runtimes, not WSL. Pick the zip that matches your PHP version and thread-safety mode, copy `php_terminal.dll` into your PHP extension directory, and enable it with:
+
+```ini
+extension=php_terminal.dll
+```
 
 Build from source on Unix-like systems:
+
+```sh
+git clone https://github.com/prateekbhujel/php-terminal.git
+cd php-terminal
+git checkout v0.3.0
+phpize
+./configure --enable-terminal
+make
+make test
+```
+
+Then try the prompt example:
+
+```sh
+php -d extension=modules/terminal.so examples/prompt.php
+```
+
+For installed builds, use your normal `extension=terminal` configuration instead of `-d extension=...`.
+
+### Build current main from source
+
+To test unreleased changes after `v0.3.0`:
 
 ```sh
 phpize
@@ -119,18 +151,6 @@ php -d extension=modules/terminal.so examples/prompt.php
 ```
 
 For installed builds, use your normal `extension=terminal` configuration instead of `-d extension=...`.
-
-### Released 0.2.0 Windows artifacts
-
-The `v0.2.0` release is available at:
-
-https://github.com/prateekbhujel/php-terminal/releases/tag/v0.2.0
-
-Windows builds are attached for PHP 8.2-8.5, x64, TS/NTS. These are native Windows builds for normal Windows PHP runtimes, not WSL. Pick the zip that matches your PHP version and thread-safety mode, copy `php_terminal.dll` into your PHP extension directory, and enable it with:
-
-```ini
-extension=php_terminal.dll
-```
 
 ### Windows PHP distributions
 
@@ -153,9 +173,9 @@ set PHP_BIN=C:\xampp\php\php.exe
 
 Download the matching zip from the release page. For example:
 
-- PHP 8.2, thread safety disabled: `php_terminal-v0.2.0-8.2-nts-vs16-x86_64.zip`
-- PHP 8.2, thread safety enabled: `php_terminal-v0.2.0-8.2-ts-vs16-x86_64.zip`
-- PHP 8.4, thread safety disabled: `php_terminal-v0.2.0-8.4-nts-vs17-x86_64.zip`
+- PHP 8.2, thread safety disabled: `php_terminal-v0.3.0-8.2-nts-vs16-x86_64.zip`
+- PHP 8.2, thread safety enabled: `php_terminal-v0.3.0-8.2-ts-vs16-x86_64.zip`
+- PHP 8.4, thread safety disabled: `php_terminal-v0.3.0-8.4-nts-vs17-x86_64.zip`
 
 Copy `php_terminal.dll` into that PHP installation's extension directory, for example:
 
@@ -291,13 +311,9 @@ Until Laravel Prompts has that adapter, existing Laravel Prompts releases will s
 
 The bundled `examples/prompt.php` file is intentionally small so framework authors can see the shape without reading a full TUI library.
 
-Laravel Prompts integration is tracked separately in:
+Future Laravel Prompts adapter work should target the `Terminal\Terminal` and enum API from `v0.3.0`.
 
-https://github.com/prateekbhujel/php-terminal/issues/18
-
-Feedback for this release is tracked in:
-
-https://github.com/prateekbhujel/php-terminal/issues/16
+For release feedback, open a new issue with the OS, terminal, PHP version, extension version, what you tried, and the behavior you expected.
 
 ## Build
 
