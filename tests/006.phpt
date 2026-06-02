@@ -1,5 +1,5 @@
 --TEST--
-terminal_read_key reads common keys from a pseudo terminal
+Terminal\Terminal::readKey reads common keys from a pseudo terminal
 --EXTENSIONS--
 terminal
 --SKIPIF--
@@ -34,7 +34,16 @@ proc_close($process);
 function read_key_from_child(string $input, float $timeout): string
 {
     $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
-    $code = 'echo "ready\n"; var_dump(terminal_read_key(' . var_export($timeout, true) . '));';
+    $code = <<<'PHP'
+echo "ready\n";
+$key = Terminal\Terminal::readKey(%s);
+if ($key instanceof Terminal\Key) {
+    echo $key->name . ':' . $key->value . "\n";
+} else {
+    var_dump($key);
+}
+PHP;
+    $code = sprintf($code, var_export($timeout, true));
     $command = escapeshellarg(PHP_BINARY) . ' -n -d extension=' . escapeshellarg($extension) . ' -r ' . escapeshellarg($code);
     $descriptors = [
         0 => ['pty'],
@@ -78,19 +87,19 @@ function read_key_from_child(string $input, float $timeout): string
 
 $cases = [
     'printable' => ['a', 'string(1) "a"'],
-    'enter' => ["\n", 'string(5) "enter"'],
-    'tab' => ["\t", 'string(3) "tab"'],
-    'backspace' => ["\x7f", 'string(9) "backspace"'],
-    'escape' => ["\033", 'string(6) "escape"'],
-    'up' => ["\033[A", 'string(2) "up"'],
-    'down' => ["\033[B", 'string(4) "down"'],
-    'right' => ["\033[C", 'string(5) "right"'],
-    'left' => ["\033[D", 'string(4) "left"'],
-    'home' => ["\033[H", 'string(4) "home"'],
-    'end' => ["\033[F", 'string(3) "end"'],
-    'delete' => ["\033[3~", 'string(6) "delete"'],
-    'pageup' => ["\033[5~", 'string(6) "pageup"'],
-    'pagedown' => ["\033[6~", 'string(8) "pagedown"'],
+    'enter' => ["\n", 'Enter:enter'],
+    'tab' => ["\t", 'Tab:tab'],
+    'backspace' => ["\x7f", 'Backspace:backspace'],
+    'escape' => ["\033", 'Escape:escape'],
+    'up' => ["\033[A", 'Up:up'],
+    'down' => ["\033[B", 'Down:down'],
+    'right' => ["\033[C", 'Right:right'],
+    'left' => ["\033[D", 'Left:left'],
+    'home' => ["\033[H", 'Home:home'],
+    'end' => ["\033[F", 'End:end'],
+    'delete' => ["\033[3~", 'Delete:delete'],
+    'pageup' => ["\033[5~", 'PageUp:pageup'],
+    'pagedown' => ["\033[6~", 'PageDown:pagedown'],
 ];
 
 foreach ($cases as $name => [$input, $expected]) {

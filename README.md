@@ -4,31 +4,65 @@
 
 The first cut stays small on purpose. It exposes the pieces that are awkward to normalize in userland, especially once Windows enters the picture, without trying to become a full TUI toolkit.
 
+Created and maintained by Pratik Bhujel.
+
+This README describes the current main-branch API. The released `v0.2.0` Windows artifacts still use the earlier procedural API; build from source for the enum API until the next release is cut.
+
 ## Current API
 
-- `terminal_backend(): string`
-- `terminal_is_tty(int $stream = TERMINAL_STDOUT): bool`
-- `terminal_supports_ansi(int $stream = TERMINAL_STDOUT): bool`
-- `terminal_enable_ansi(int $stream = TERMINAL_STDOUT): bool`
-- `terminal_get_size(int $stream = TERMINAL_STDOUT): array{columns:int, rows:int}|false`
-- `terminal_write(string $data, int $stream = TERMINAL_STDOUT): int|false`
-- `terminal_enable_raw_mode(int $stream = TERMINAL_STDIN): string|false`
-- `terminal_restore_mode(string $mode): bool`
-- `terminal_read_key(?float $timeout = null): string|false`
-- `terminal_read_secret(?float $timeout = null): string|false`
+The core-oriented API is namespaced and uses enums for values with a fixed set of cases:
 
-`terminal_enable_ansi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals.
-`terminal_write()` accepts `TERMINAL_STDOUT` and `TERMINAL_STDERR`.
-`terminal_enable_raw_mode()` currently accepts `TERMINAL_STDIN` and returns an opaque mode token that should be passed back to `terminal_restore_mode()`.
-`terminal_enable_raw_mode()` leaves terminal output processing intact, so normal prompt output such as `"\n"` keeps working while input is read one key at a time.
-`terminal_read_key()` temporarily prepares standard input for key reads, returns printable keys as-is including UTF-8 input, named keys as strings like `up`, `down`, `left`, `right`, `enter`, `backspace`, `escape`, and `tab`, restores the previous mode before returning, and returns `false` when no key is available before the timeout.
-`terminal_read_secret()` reads a hidden line from standard input, restores the previous mode before returning, handles backspace and UTF-8 input, and returns `false` on timeout or abort.
+- `Terminal\Terminal::getBackend(): Terminal\Backend`
+- `Terminal\Terminal::isTty(Terminal\Stream $stream = Terminal\Stream::Stdout): bool`
+- `Terminal\Terminal::supportsAnsi(Terminal\Stream $stream = Terminal\Stream::Stdout): bool`
+- `Terminal\Terminal::enableAnsi(Terminal\Stream $stream = Terminal\Stream::Stdout): bool`
+- `Terminal\Terminal::getSize(Terminal\Stream $stream = Terminal\Stream::Stdout): array{columns:int, rows:int}|false`
+- `Terminal\Terminal::write(string $data, Terminal\Stream $stream = Terminal\Stream::Stdout): int|false`
+- `Terminal\Terminal::enableRawMode(Terminal\Stream $stream = Terminal\Stream::Stdin): string|false`
+- `Terminal\Terminal::restoreMode(string $mode): bool`
+- `Terminal\Terminal::readKey(?float $timeout = null): Terminal\Key|string|false`
+- `Terminal\Terminal::readSecret(?float $timeout = null): string|false`
 
-Constants:
+Enums:
 
-- `TERMINAL_STDIN`
-- `TERMINAL_STDOUT`
-- `TERMINAL_STDERR`
+- `Terminal\Backend`: `Posix`, `Windows`
+- `Terminal\Stream`: `Stdin`, `Stdout`, `Stderr`
+- `Terminal\Key`: `Up`, `Down`, `Left`, `Right`, `Enter`, `Backspace`, `Escape`, `Tab`, `Home`, `End`, `Delete`, `PageUp`, `PageDown`
+
+`Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals.
+`Terminal\Terminal::write()` accepts `Terminal\Stream::Stdout` and `Terminal\Stream::Stderr`.
+`Terminal\Terminal::enableRawMode()` currently accepts `Terminal\Stream::Stdin` and returns an opaque mode token that should be passed back to `Terminal\Terminal::restoreMode()`.
+`Terminal\Terminal::enableRawMode()` leaves terminal output processing intact, so normal prompt output such as `"\n"` keeps working while input is read one key at a time.
+`Terminal\Terminal::readKey()` temporarily prepares standard input for key reads, restores the previous mode before returning, returns special keys as `Terminal\Key` cases, returns printable input as strings including UTF-8 input, and returns `false` when no key is available before the timeout.
+Printable Unicode input is returned as the next encoded code point from the terminal, not as a full grapheme cluster.
+`Terminal\Terminal::readSecret()` reads a hidden line from standard input, restores the previous mode before returning, handles backspace and UTF-8 input, and returns `false` on timeout or abort.
+
+The earlier procedural API was removed while the project is still pre-1.0 so the extension can track the PHP core discussion more closely.
+
+Example:
+
+```php
+use Terminal\Key;
+use Terminal\Stream;
+use Terminal\Terminal;
+
+Terminal::enableAnsi(Stream::Stdout);
+
+$mode = Terminal::enableRawMode();
+try {
+    $key = Terminal::readKey();
+
+    if ($key === Key::Up) {
+        Terminal::write("up\n");
+    } elseif (is_string($key)) {
+        Terminal::write("typed {$key}\n");
+    }
+} finally {
+    if (is_string($mode)) {
+        Terminal::restoreMode($mode);
+    }
+}
+```
 
 ## Why this exists
 
@@ -65,7 +99,28 @@ extension=terminal
 extension=php_terminal.dll
 ```
 
-## Installing 0.2.0
+## Installing
+
+The enum API is currently source-first on `main`.
+
+Build from source on Unix-like systems:
+
+```sh
+phpize
+./configure --enable-terminal
+make
+make test
+```
+
+Then try the prompt example:
+
+```sh
+php -d extension=modules/terminal.so examples/prompt.php
+```
+
+For installed builds, use your normal `extension=terminal` configuration instead of `-d extension=...`.
+
+### Released 0.2.0 Windows artifacts
 
 The `v0.2.0` release is available at:
 
@@ -129,23 +184,6 @@ Test it with XAMPP's CLI PHP:
 ```
 
 Once enabled in that PHP runtime, any CLI app using the same `php.exe` can detect and use `terminal`. The app or framework still needs integration code; the extension provides the native Windows terminal primitives.
-
-On Unix-like systems, build from source for now:
-
-```sh
-phpize
-./configure --enable-terminal
-make
-make test
-```
-
-Then try the prompt example:
-
-```sh
-php -d extension=modules/terminal.so examples/prompt.php
-```
-
-For installed builds, use your normal `extension=terminal` configuration instead of `-d extension=...`.
 
 ### Install into a specific PHP distribution
 
@@ -221,31 +259,31 @@ That means the end-user path should be: install the matching Windows `php_termin
 
 A Laravel Prompts adapter would keep Laravel's existing prompt code, but swap the terminal backend when this extension is available:
 
-- use `terminal_is_tty(TERMINAL_STDIN)` for interactivity checks
-- use `terminal_enable_ansi()` before rendering ANSI prompts on Windows
-- use `terminal_enable_raw_mode()` and `terminal_restore_mode()` instead of `stty`
-- use `terminal_read_key()` for input
-- use `terminal_read_secret()` for password/secret prompts instead of shelling out to platform-specific helpers
-- map extension key names back to Laravel Prompts' existing `Key::*` values
-- use `terminal_get_size()` for columns and rows
+- use `Terminal\Terminal::isTty(Terminal\Stream::Stdin)` for interactivity checks
+- use `Terminal\Terminal::enableAnsi()` before rendering ANSI prompts on Windows
+- use `Terminal\Terminal::enableRawMode()` and `Terminal\Terminal::restoreMode()` instead of `stty`
+- use `Terminal\Terminal::readKey()` for input
+- use `Terminal\Terminal::readSecret()` for password/secret prompts instead of shelling out to platform-specific helpers
+- map `Terminal\Key::*` cases back to Laravel Prompts' existing `Key::*` values
+- use `Terminal\Terminal::getSize()` for columns and rows
 
 The key mapping is intentionally small and predictable:
 
-| `terminal_read_key()` | Laravel Prompts key |
+| `Terminal\Terminal::readKey()` | Laravel Prompts key |
 | --- | --- |
-| `up` | `Key::UP` |
-| `down` | `Key::DOWN` |
-| `left` | `Key::LEFT` |
-| `right` | `Key::RIGHT` |
-| `enter` | `Key::ENTER` |
-| `backspace` | `Key::BACKSPACE` |
-| `delete` | `Key::DELETE` |
-| `escape` | `Key::ESCAPE` |
-| `tab` | `Key::TAB` |
-| `home` | first `Key::HOME` value |
-| `end` | first `Key::END` value |
-| `pageup` | `Key::PAGE_UP` |
-| `pagedown` | `Key::PAGE_DOWN` |
+| `Terminal\Key::Up` | `Key::UP` |
+| `Terminal\Key::Down` | `Key::DOWN` |
+| `Terminal\Key::Left` | `Key::LEFT` |
+| `Terminal\Key::Right` | `Key::RIGHT` |
+| `Terminal\Key::Enter` | `Key::ENTER` |
+| `Terminal\Key::Backspace` | `Key::BACKSPACE` |
+| `Terminal\Key::Delete` | `Key::DELETE` |
+| `Terminal\Key::Escape` | `Key::ESCAPE` |
+| `Terminal\Key::Tab` | `Key::TAB` |
+| `Terminal\Key::Home` | first `Key::HOME` value |
+| `Terminal\Key::End` | first `Key::END` value |
+| `Terminal\Key::PageUp` | `Key::PAGE_UP` |
+| `Terminal\Key::PageDown` | `Key::PAGE_DOWN` |
 
 Printable input is returned as the typed character, so normal text prompts do not need special handling.
 
@@ -285,18 +323,20 @@ if (!extension_loaded('terminal')) {
     die("terminal is not loaded\n");
 }
 
-var_dump(terminal_backend());
-var_dump(terminal_is_tty());
-var_dump(terminal_supports_ansi());
-var_dump(terminal_get_size());
-terminal_write("hello from terminal\n");
+use Terminal\Terminal;
 
-$mode = terminal_enable_raw_mode();
+var_dump(Terminal::getBackend());
+var_dump(Terminal::isTty());
+var_dump(Terminal::supportsAnsi());
+var_dump(Terminal::getSize());
+Terminal::write("hello from terminal\n");
+
+$mode = Terminal::enableRawMode();
 if (is_string($mode)) {
     try {
-        $key = terminal_read_key(0.5);
+        $key = Terminal::readKey(0.5);
     } finally {
-        terminal_restore_mode($mode);
+        Terminal::restoreMode($mode);
     }
 }
 ```

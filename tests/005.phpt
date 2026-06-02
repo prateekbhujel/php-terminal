@@ -1,18 +1,21 @@
 --TEST--
-terminal_read_key API shape
+Terminal\Terminal::readKey API shape
 --EXTENSIONS--
 terminal
 --FILE--
 <?php
-$key = terminal_read_key(0);
-var_dump($key === false || is_string($key));
+use Terminal\Key;
+use Terminal\Terminal;
+
+$key = Terminal::readKey(0);
+var_dump($key === false || $key instanceof Key || is_string($key));
 
 try {
-    terminal_read_key(-1);
+    Terminal::readKey(-1);
 } catch (ValueError $e) {
     echo $e->getMessage(), "\n";
 }
 ?>
 --EXPECT--
 bool(true)
-terminal_read_key(): Argument #1 ($timeout) must be greater than or equal to 0
+Terminal\Terminal::readKey(): Argument #1 ($timeout) must be greater than or equal to 0

@@ -1,27 +1,29 @@
 <?php
 
+use Terminal\Terminal;
+
 if (!extension_loaded('terminal')) {
 	fwrite(STDERR, "terminal extension is not loaded\n");
 	exit(1);
 }
 
-var_dump(terminal_backend());
-var_dump(terminal_is_tty());
-var_dump(terminal_supports_ansi());
-var_dump(terminal_enable_ansi());
-var_dump(terminal_get_size());
-var_dump(terminal_write("hello from terminal\n"));
+var_dump(Terminal::getBackend());
+var_dump(Terminal::isTty());
+var_dump(Terminal::supportsAnsi());
+var_dump(Terminal::enableAnsi());
+var_dump(Terminal::getSize());
+var_dump(Terminal::write("hello from terminal\n"));
 
-$mode = terminal_enable_raw_mode();
+$mode = Terminal::enableRawMode();
 var_dump($mode === false || is_string($mode));
 if (is_string($mode)) {
 	try {
-		var_dump(terminal_read_key(0.5));
+		var_dump(Terminal::readKey(0.5));
 	} finally {
-		var_dump(terminal_restore_mode($mode));
+		var_dump(Terminal::restoreMode($mode));
 	}
 }
 
-terminal_write("Secret demo. Type a value and press Enter: ");
-$secret = terminal_read_secret(30);
-terminal_write("\nSecret length: " . (is_string($secret) ? strlen($secret) : 0) . "\n");
+Terminal::write("Secret demo. Type a value and press Enter: ");
+$secret = Terminal::readSecret(30);
+Terminal::write("\nSecret length: " . (is_string($secret) ? strlen($secret) : 0) . "\n");

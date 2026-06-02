@@ -1,25 +1,28 @@
 --TEST--
-terminal runtime helpers
+Terminal runtime helpers
 --EXTENSIONS--
 terminal
 --FILE--
 <?php
-$size = terminal_get_size();
+use Terminal\Stream;
+use Terminal\Terminal;
 
-var_dump(is_bool(terminal_is_tty()));
-var_dump(is_bool(terminal_supports_ansi()));
-var_dump(is_bool(terminal_enable_ansi()));
+$size = Terminal::getSize();
+
+var_dump(is_bool(Terminal::isTty()));
+var_dump(is_bool(Terminal::supportsAnsi()));
+var_dump(is_bool(Terminal::enableAnsi()));
 var_dump($size === false || (is_array($size) && isset($size['columns'], $size['rows']) && is_int($size['columns']) && is_int($size['rows'])));
-var_dump(terminal_write("terminal-write\n") >= 15);
+var_dump(Terminal::write("terminal-write\n") >= 15);
 
 try {
-    terminal_write("x", TERMINAL_STDIN);
+    Terminal::write("x", Stream::Stdin);
 } catch (ValueError $e) {
     echo $e->getMessage(), "\n";
 }
 
 try {
-    terminal_enable_ansi(TERMINAL_STDIN);
+    Terminal::enableAnsi(Stream::Stdin);
 } catch (ValueError $e) {
     echo $e->getMessage(), "\n";
 }
@@ -31,5 +34,5 @@ bool(true)
 bool(true)
 terminal-write
 bool(true)
-terminal_write(): Argument #2 ($stream) must be TERMINAL_STDOUT or TERMINAL_STDERR
-terminal_enable_ansi(): Argument #1 ($stream) must be TERMINAL_STDOUT or TERMINAL_STDERR
+Terminal\Terminal::write(): Argument #2 ($stream) must be Terminal\Stream::Stdout or Terminal\Stream::Stderr
+Terminal\Terminal::enableAnsi(): Argument #1 ($stream) must be Terminal\Stream::Stdout or Terminal\Stream::Stderr

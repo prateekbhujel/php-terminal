@@ -6,6 +6,7 @@
 
 #include "php.h"
 #include "Zend/zend_smart_str.h"
+#include "Zend/zend_enum.h"
 #include "ext/standard/info.h"
 #include "php_terminal.h"
 #include "terminal_arginfo.h"
@@ -37,10 +38,9 @@ typedef struct _terminal_saved_mode {
 #endif
 } terminal_saved_mode;
 
-static zend_always_inline bool terminal_valid_stream(zend_long stream)
-{
-	return stream >= TERMINAL_STREAM_STDIN && stream <= TERMINAL_STREAM_STDERR;
-}
+static zend_class_entry *terminal_backend_ce;
+static zend_class_entry *terminal_stream_ce;
+static zend_class_entry *terminal_key_ce;
 
 static zend_string *terminal_key_string(const char *key)
 {
@@ -50,6 +50,61 @@ static zend_string *terminal_key_string(const char *key)
 static zend_string *terminal_key_char(unsigned char key)
 {
 	return zend_string_init((const char *) &key, 1, false);
+}
+
+static zend_long terminal_stream_from_enum(zval *stream)
+{
+	return Z_LVAL_P(zend_enum_fetch_case_value(Z_OBJ_P(stream)));
+}
+
+static void terminal_set_enum_case(zval *return_value, zend_class_entry *ce, const char *case_name)
+{
+	RETVAL_OBJ_COPY(zend_enum_get_case_cstr(ce, case_name));
+}
+
+static zend_object *terminal_key_enum_from_string(zend_string *key)
+{
+	if (zend_string_equals_literal(key, "up")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "Up");
+	}
+	if (zend_string_equals_literal(key, "down")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "Down");
+	}
+	if (zend_string_equals_literal(key, "right")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "Right");
+	}
+	if (zend_string_equals_literal(key, "left")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "Left");
+	}
+	if (zend_string_equals_literal(key, "enter")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "Enter");
+	}
+	if (zend_string_equals_literal(key, "backspace")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "Backspace");
+	}
+	if (zend_string_equals_literal(key, "escape")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "Escape");
+	}
+	if (zend_string_equals_literal(key, "tab")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "Tab");
+	}
+	if (zend_string_equals_literal(key, "home")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "Home");
+	}
+	if (zend_string_equals_literal(key, "end")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "End");
+	}
+	if (zend_string_equals_literal(key, "delete")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "Delete");
+	}
+	if (zend_string_equals_literal(key, "pageup")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "PageUp");
+	}
+	if (zend_string_equals_literal(key, "pagedown")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "PageDown");
+	}
+
+	return NULL;
 }
 
 static void terminal_buffer_remove_last_utf8_char(smart_str *buffer)
@@ -1060,80 +1115,78 @@ restore:
 }
 #endif
 
-static void terminal_validate_stream_or_throw(zend_long stream, uint32_t arg_num)
-{
-	if (!terminal_valid_stream(stream)) {
-		zend_argument_value_error(arg_num, "must be TERMINAL_STDIN, TERMINAL_STDOUT, or TERMINAL_STDERR");
-	}
-}
-
 static void terminal_validate_output_stream_or_throw(zend_long stream, uint32_t arg_num)
 {
 	if (stream != TERMINAL_STREAM_STDOUT && stream != TERMINAL_STREAM_STDERR) {
-		zend_argument_value_error(arg_num, "must be TERMINAL_STDOUT or TERMINAL_STDERR");
+		zend_argument_value_error(arg_num, "must be Terminal\\Stream::Stdout or Terminal\\Stream::Stderr");
 	}
 }
 
 static void terminal_validate_input_stream_or_throw(zend_long stream, uint32_t arg_num)
 {
 	if (stream != TERMINAL_STREAM_STDIN) {
-		zend_argument_value_error(arg_num, "must be TERMINAL_STDIN");
+		zend_argument_value_error(arg_num, "must be Terminal\\Stream::Stdin");
 	}
 }
 
-PHP_FUNCTION(terminal_backend)
+ZEND_METHOD(Terminal_Terminal, getBackend)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 
 #ifdef PHP_WIN32
-	RETURN_STRING("windows");
+	terminal_set_enum_case(return_value, terminal_backend_ce, "Windows");
 #else
-	RETURN_STRING("posix");
+	terminal_set_enum_case(return_value, terminal_backend_ce, "Posix");
 #endif
 }
 
-PHP_FUNCTION(terminal_is_tty)
+ZEND_METHOD(Terminal_Terminal, isTty)
 {
+	zval *stream_case = NULL;
 	zend_long stream = TERMINAL_STREAM_STDOUT;
 
 	ZEND_PARSE_PARAMETERS_START(0, 1)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_LONG(stream)
+		Z_PARAM_OBJECT_OF_CLASS(stream_case, terminal_stream_ce)
 	ZEND_PARSE_PARAMETERS_END();
 
-	terminal_validate_stream_or_throw(stream, 1);
-	if (EG(exception)) {
-		RETURN_THROWS();
+	if (stream_case != NULL) {
+		stream = terminal_stream_from_enum(stream_case);
 	}
 
 	RETURN_BOOL(terminal_stream_is_tty(stream));
 }
 
-PHP_FUNCTION(terminal_supports_ansi)
+ZEND_METHOD(Terminal_Terminal, supportsAnsi)
 {
+	zval *stream_case = NULL;
 	zend_long stream = TERMINAL_STREAM_STDOUT;
 
 	ZEND_PARSE_PARAMETERS_START(0, 1)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_LONG(stream)
+		Z_PARAM_OBJECT_OF_CLASS(stream_case, terminal_stream_ce)
 	ZEND_PARSE_PARAMETERS_END();
 
-	terminal_validate_stream_or_throw(stream, 1);
-	if (EG(exception)) {
-		RETURN_THROWS();
+	if (stream_case != NULL) {
+		stream = terminal_stream_from_enum(stream_case);
 	}
 
 	RETURN_BOOL(terminal_stream_supports_ansi(stream));
 }
 
-PHP_FUNCTION(terminal_enable_ansi)
+ZEND_METHOD(Terminal_Terminal, enableAnsi)
 {
+	zval *stream_case = NULL;
 	zend_long stream = TERMINAL_STREAM_STDOUT;
 
 	ZEND_PARSE_PARAMETERS_START(0, 1)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_LONG(stream)
+		Z_PARAM_OBJECT_OF_CLASS(stream_case, terminal_stream_ce)
 	ZEND_PARSE_PARAMETERS_END();
+
+	if (stream_case != NULL) {
+		stream = terminal_stream_from_enum(stream_case);
+	}
 
 	terminal_validate_output_stream_or_throw(stream, 1);
 	if (EG(exception)) {
@@ -1143,20 +1196,20 @@ PHP_FUNCTION(terminal_enable_ansi)
 	RETURN_BOOL(terminal_enable_stream_ansi(stream));
 }
 
-PHP_FUNCTION(terminal_get_size)
+ZEND_METHOD(Terminal_Terminal, getSize)
 {
+	zval *stream_case = NULL;
 	zend_long stream = TERMINAL_STREAM_STDOUT;
 	zend_long columns;
 	zend_long rows;
 
 	ZEND_PARSE_PARAMETERS_START(0, 1)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_LONG(stream)
+		Z_PARAM_OBJECT_OF_CLASS(stream_case, terminal_stream_ce)
 	ZEND_PARSE_PARAMETERS_END();
 
-	terminal_validate_stream_or_throw(stream, 1);
-	if (EG(exception)) {
-		RETURN_THROWS();
+	if (stream_case != NULL) {
+		stream = terminal_stream_from_enum(stream_case);
 	}
 
 	if (!terminal_stream_size(stream, &columns, &rows)) {
@@ -1168,17 +1221,22 @@ PHP_FUNCTION(terminal_get_size)
 	add_assoc_long(return_value, "rows", rows);
 }
 
-PHP_FUNCTION(terminal_write)
+ZEND_METHOD(Terminal_Terminal, write)
 {
 	zend_string *data;
+	zval *stream_case = NULL;
 	zend_long stream = TERMINAL_STREAM_STDOUT;
 	zend_long written;
 
 	ZEND_PARSE_PARAMETERS_START(1, 2)
 		Z_PARAM_STR(data)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_LONG(stream)
+		Z_PARAM_OBJECT_OF_CLASS(stream_case, terminal_stream_ce)
 	ZEND_PARSE_PARAMETERS_END();
+
+	if (stream_case != NULL) {
+		stream = terminal_stream_from_enum(stream_case);
+	}
 
 	terminal_validate_output_stream_or_throw(stream, 2);
 	if (EG(exception)) {
@@ -1192,15 +1250,20 @@ PHP_FUNCTION(terminal_write)
 	RETURN_LONG(written);
 }
 
-PHP_FUNCTION(terminal_enable_raw_mode)
+ZEND_METHOD(Terminal_Terminal, enableRawMode)
 {
+	zval *stream_case = NULL;
 	zend_long stream = TERMINAL_STREAM_STDIN;
 	terminal_saved_mode saved;
 
 	ZEND_PARSE_PARAMETERS_START(0, 1)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_LONG(stream)
+		Z_PARAM_OBJECT_OF_CLASS(stream_case, terminal_stream_ce)
 	ZEND_PARSE_PARAMETERS_END();
+
+	if (stream_case != NULL) {
+		stream = terminal_stream_from_enum(stream_case);
+	}
 
 	terminal_validate_input_stream_or_throw(stream, 1);
 	if (EG(exception)) {
@@ -1214,7 +1277,7 @@ PHP_FUNCTION(terminal_enable_raw_mode)
 	RETURN_STRINGL((const char *) &saved, sizeof(saved));
 }
 
-PHP_FUNCTION(terminal_restore_mode)
+ZEND_METHOD(Terminal_Terminal, restoreMode)
 {
 	zend_string *mode;
 	terminal_saved_mode saved;
@@ -1224,24 +1287,26 @@ PHP_FUNCTION(terminal_restore_mode)
 	ZEND_PARSE_PARAMETERS_END();
 
 	if (ZSTR_LEN(mode) != sizeof(saved)) {
-		zend_argument_value_error(1, "must be a terminal mode token returned by terminal_enable_raw_mode()");
+		zend_argument_value_error(1, "must be a terminal mode token returned by Terminal\\Terminal::enableRawMode()");
 		RETURN_THROWS();
 	}
 
 	memcpy(&saved, ZSTR_VAL(mode), sizeof(saved));
 
 	if (memcmp(saved.magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN) != 0) {
-		zend_argument_value_error(1, "must be a terminal mode token returned by terminal_enable_raw_mode()");
+		zend_argument_value_error(1, "must be a terminal mode token returned by Terminal\\Terminal::enableRawMode()");
 		RETURN_THROWS();
 	}
 
 	RETURN_BOOL(terminal_restore_stream_mode(&saved));
 }
 
-PHP_FUNCTION(terminal_read_key)
+ZEND_METHOD(Terminal_Terminal, readKey)
 {
 	double timeout = 0;
 	bool timeout_is_null = true;
+	zend_string *key;
+	zend_object *key_case;
 
 	ZEND_PARSE_PARAMETERS_START(0, 1)
 		Z_PARAM_OPTIONAL
@@ -1253,28 +1318,21 @@ PHP_FUNCTION(terminal_read_key)
 		RETURN_THROWS();
 	}
 
-#ifdef PHP_WIN32
-	{
-		zend_string *key = terminal_read_stdin_key(timeout, timeout_is_null);
-
-		if (key != NULL) {
-			RETURN_STR(key);
-		}
+	key = terminal_read_stdin_key(timeout, timeout_is_null);
+	if (key == NULL) {
+		RETURN_FALSE;
 	}
-#else
-	{
-		zend_string *key = terminal_read_stdin_key(timeout, timeout_is_null);
 
-		if (key != NULL) {
-			RETURN_STR(key);
-		}
+	key_case = terminal_key_enum_from_string(key);
+	if (key_case != NULL) {
+		zend_string_release(key);
+		RETURN_OBJ_COPY(key_case);
 	}
-#endif
 
-	RETURN_FALSE;
+	RETURN_STR(key);
 }
 
-PHP_FUNCTION(terminal_read_secret)
+ZEND_METHOD(Terminal_Terminal, readSecret)
 {
 	double timeout = 0;
 	bool timeout_is_null = true;
@@ -1300,19 +1358,25 @@ PHP_FUNCTION(terminal_read_secret)
 
 PHP_MINIT_FUNCTION(terminal)
 {
+	(void) type;
+	(void) module_number;
+
 #if defined(ZTS) && defined(COMPILE_DL_TERMINAL)
 	ZEND_TSRMLS_CACHE_UPDATE();
 #endif
 
-	REGISTER_LONG_CONSTANT("TERMINAL_STDIN", TERMINAL_STREAM_STDIN, CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("TERMINAL_STDOUT", TERMINAL_STREAM_STDOUT, CONST_PERSISTENT);
-	REGISTER_LONG_CONSTANT("TERMINAL_STDERR", TERMINAL_STREAM_STDERR, CONST_PERSISTENT);
+	terminal_backend_ce = register_class_Terminal_Backend();
+	terminal_stream_ce = register_class_Terminal_Stream();
+	terminal_key_ce = register_class_Terminal_Key();
+	register_class_Terminal_Terminal();
 
 	return SUCCESS;
 }
 
 PHP_MINFO_FUNCTION(terminal)
 {
+	(void) zend_module;
+
 	php_info_print_table_start();
 	php_info_print_table_row(2, "terminal support", "enabled");
 #ifdef PHP_WIN32
@@ -1326,7 +1390,7 @@ PHP_MINFO_FUNCTION(terminal)
 zend_module_entry terminal_module_entry = {
 	STANDARD_MODULE_HEADER,
 	"terminal",
-	ext_functions,
+	NULL,
 	PHP_MINIT(terminal),
 	NULL,
 	NULL,

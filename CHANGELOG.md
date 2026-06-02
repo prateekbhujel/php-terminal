@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Added `Terminal\Terminal` as the core-oriented API surface.
+- Added `Terminal\Backend`, `Terminal\Stream`, and `Terminal\Key` enums.
+- `Terminal\Terminal::readKey()` now returns special keys as `Terminal\Key` cases and printable input as strings.
+- Removed the pre-1.0 procedural function and `TERMINAL_*` constant API.
+- Updated examples, docs, and tests to use the namespaced API only.
+
 ## 0.2.0 - 2026-06-01
 
 - Added `terminal_enable_ansi()` for ANSI/VT output enablement.
