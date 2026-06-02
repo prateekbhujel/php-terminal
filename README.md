@@ -357,4 +357,4 @@ if (is_string($mode)) {
 }
 ```
 
-There are runnable examples in [`examples/basic.php`](./examples/basic.php) and [`examples/prompt.php`](./examples/prompt.php).
+There are runnable examples in [`examples/basic.php`](./examples/basic.php), [`examples/doctor.php`](./examples/doctor.php), and [`examples/prompt.php`](./examples/prompt.php).
