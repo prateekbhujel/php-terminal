@@ -1,38 +1,14 @@
 # terminal
 
-[![CI](https://github.com/prateekbhujel/php-terminal/actions/workflows/ci.yml/badge.svg)](https://github.com/prateekbhujel/php-terminal/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/prateekbhujel/php-terminal)](https://github.com/prateekbhujel/php-terminal/releases)
+`terminal` is a PHP extension for basic terminal capabilities on Unix-like systems and Windows.
 
-`terminal` is a PHP extension for the terminal primitives CLI apps keep reimplementing differently on Unix-like systems and Windows.
-
-It answers the boring but hard questions from native code:
-
-- is stdin/stdout/stderr attached to a real terminal?
-- can this stream render ANSI/VT output?
-- what is the terminal size?
-- can PHP read one key without waiting for Enter?
-- can PHP read hidden password input without shelling out?
-- can raw terminal mode be restored safely?
-
-The project stays small on purpose. It is not a TUI toolkit and it does not replace prompt libraries. It exposes the low-level terminal layer those libraries need, especially on native Windows where userland workarounds usually become `stty`, `mode CON`, WSL, or helper executables.
+The first cut stays small on purpose. It exposes the pieces that are awkward to normalize in userland, especially once Windows enters the picture, without trying to become a full TUI toolkit.
 
 Created and maintained by Pratik Bhujel.
 
 Current release: `v0.3.0`.
 
 `v0.3.0` is the first release with the `Terminal\Terminal` class and enum API. The older `v0.2.0` release used the first procedural `terminal_*()` API.
-
-## Best current fit
-
-Use `terminal` when you are building or adapting PHP CLI tools that need:
-
-- Laravel Prompts/Symfony Console-style interactive input on native Windows
-- arrow-key menus, text prompts, confirmations, and password prompts
-- reliable raw-mode restore after a timeout, abort, or exception
-- one PHP API across macOS, Linux, Windows Terminal, PowerShell, and Command Prompt
-- a small native capability layer instead of a full terminal UI dependency
-
-For the PHP core direction, see [`docs/CORE_DIRECTION.md`](./docs/CORE_DIRECTION.md). For framework and app integration notes, see [`docs/ADOPTION.md`](./docs/ADOPTION.md).
 
 ## Current API
 
@@ -168,11 +144,10 @@ make
 make test
 ```
 
-Then try the prompt and key inspector examples:
+Then try the prompt example:
 
 ```sh
 php -d extension=modules/terminal.so examples/prompt.php
-php -d extension=modules/terminal.so examples/key-inspector.php
 ```
 
 For installed builds, use your normal `extension=terminal` configuration instead of `-d extension=...`.
@@ -382,4 +357,4 @@ if (is_string($mode)) {
 }
 ```
 
-There are runnable examples in [`examples/basic.php`](./examples/basic.php), [`examples/doctor.php`](./examples/doctor.php), [`examples/prompt.php`](./examples/prompt.php), and [`examples/key-inspector.php`](./examples/key-inspector.php).
+There are runnable examples in [`examples/basic.php`](./examples/basic.php), [`examples/doctor.php`](./examples/doctor.php), and [`examples/prompt.php`](./examples/prompt.php).
