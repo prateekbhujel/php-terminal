@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Added core-direction notes for PHP internals and package design feedback.
+- Added adoption notes for framework and prompt-library adapters.
+- Added `examples/key-inspector.php` for manual key input testing.
+- Added GitHub issue templates for bug reports and Windows manual test reports.
+
 ## 0.3.0 - 2026-06-02
 
 - Added `Terminal\Terminal` as the core-oriented API surface.
