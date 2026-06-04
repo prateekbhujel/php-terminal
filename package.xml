@@ -47,9 +47,14 @@
             <file name="terminal.c" role="src" />
             <file name="terminal.stub.php" role="src" />
             <file name="terminal_arginfo.h" role="src" />
+            <dir name="docs">
+                <file name="ADOPTION.md" role="doc" />
+                <file name="CORE_DIRECTION.md" role="doc" />
+            </dir>
             <dir name="examples">
                 <file name="basic.php" role="doc" />
                 <file name="doctor.php" role="doc" />
+                <file name="key-inspector.php" role="doc" />
                 <file name="prompt.php" role="doc" />
             </dir>
             <dir name="tests">
