@@ -7,15 +7,18 @@
 #include "php.h"
 #include "Zend/zend_smart_str.h"
 #include "Zend/zend_enum.h"
+#include "ext/standard/basic_functions.h"
 #include "ext/standard/info.h"
 #include "php_terminal.h"
 #include "terminal_arginfo.h"
 
+#include <errno.h>
+#include <limits.h>
+#include <stdlib.h>
+
 #ifdef PHP_WIN32
 # include <windows.h>
 #else
-# include <errno.h>
-# include <limits.h>
 # include <stdint.h>
 # include <sys/select.h>
 # include <sys/time.h>
@@ -123,6 +126,58 @@ static void terminal_buffer_remove_last_utf8_char(smart_str *buffer)
 
 	ZSTR_VAL(buffer->s)[len] = '\0';
 	ZSTR_LEN(buffer->s) = len;
+}
+
+static bool terminal_parse_positive_env_long(zend_string *value, zend_long *result)
+{
+	const char *cursor;
+	long parsed;
+
+	if (value == NULL || ZSTR_LEN(value) == 0) {
+		return false;
+	}
+
+	for (cursor = ZSTR_VAL(value); *cursor != '\0'; cursor++) {
+		if (*cursor < '0' || *cursor > '9') {
+			return false;
+		}
+	}
+
+	errno = 0;
+	parsed = strtol(ZSTR_VAL(value), NULL, 10);
+
+	if (errno == ERANGE || parsed <= 0) {
+		return false;
+	}
+
+	*result = (zend_long) parsed;
+
+	return true;
+}
+
+static bool terminal_size_from_environment(zend_long *columns, zend_long *rows)
+{
+	zend_string *columns_value = php_getenv("COLUMNS", sizeof("COLUMNS") - 1);
+	zend_string *rows_value = php_getenv("LINES", sizeof("LINES") - 1);
+	zend_long env_columns;
+	zend_long env_rows;
+	bool result = false;
+
+	if (terminal_parse_positive_env_long(columns_value, &env_columns)
+		&& terminal_parse_positive_env_long(rows_value, &env_rows)) {
+		*columns = env_columns;
+		*rows = env_rows;
+		result = true;
+	}
+
+	if (columns_value != NULL) {
+		zend_string_release(columns_value);
+	}
+	if (rows_value != NULL) {
+		zend_string_release(rows_value);
+	}
+
+	return result;
 }
 
 #ifdef PHP_WIN32
@@ -1212,7 +1267,8 @@ ZEND_METHOD(Terminal_Terminal, getSize)
 		stream = terminal_stream_from_enum(stream_case);
 	}
 
-	if (!terminal_stream_size(stream, &columns, &rows)) {
+	if (!terminal_stream_size(stream, &columns, &rows)
+		&& !terminal_size_from_environment(&columns, &rows)) {
 		RETURN_FALSE;
 	}
 
