@@ -29,7 +29,7 @@
 
 #define TERMINAL_MODE_TOKEN_MAGIC "PHPTTY1"
 #define TERMINAL_MODE_TOKEN_MAGIC_LEN (sizeof(TERMINAL_MODE_TOKEN_MAGIC) - 1)
-#define TERMINAL_ESCAPE_TIMEOUT_MS 25
+#define TERMINAL_SEQUENCE_TIMEOUT_MS 25
 
 typedef struct _terminal_saved_mode {
 	char magic[TERMINAL_MODE_TOKEN_MAGIC_LEN];
@@ -465,7 +465,7 @@ static zend_string *terminal_key_from_input_record(const KEY_EVENT_RECORD *key)
 	return terminal_key_from_wchar(key->uChar.UnicodeChar);
 }
 
-static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null)
+static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
 {
 	HANDLE handle = terminal_handle_from_id(TERMINAL_STREAM_STDIN);
 	DWORD mode;
@@ -473,6 +473,9 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 	DWORD wait_ms = terminal_timeout_to_wait_ms(timeout, timeout_is_null);
 	ULONGLONG deadline_ms = wait_ms == INFINITE ? 0 : GetTickCount64() + wait_ms;
 	zend_string *result = NULL;
+
+	(void) sequence_timeout;
+	(void) sequence_timeout_is_null;
 
 	if (handle == INVALID_HANDLE_VALUE || handle == NULL || !GetConsoleMode(handle, &mode)) {
 		return NULL;
@@ -919,18 +922,18 @@ static zend_string *terminal_key_from_csi_sequence(const unsigned char *sequence
 	return terminal_key_string("escape");
 }
 
-static zend_string *terminal_key_from_escape_sequence(int fd)
+static zend_string *terminal_key_from_escape_sequence(int fd, int sequence_timeout_ms)
 {
 	unsigned char sequence[8];
 	size_t sequence_len = 0;
-	int result = terminal_read_byte(fd, &sequence[sequence_len++], TERMINAL_ESCAPE_TIMEOUT_MS);
+	int result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms);
 
 	if (result <= 0) {
 		return terminal_key_string("escape");
 	}
 
 	if (sequence[0] == 'O') {
-		result = terminal_read_byte(fd, &sequence[sequence_len++], TERMINAL_ESCAPE_TIMEOUT_MS);
+		result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms);
 		if (result <= 0) {
 			return terminal_key_string("escape");
 		}
@@ -943,13 +946,22 @@ static zend_string *terminal_key_from_escape_sequence(int fd)
 	}
 
 	do {
-		result = terminal_read_byte(fd, &sequence[sequence_len++], TERMINAL_ESCAPE_TIMEOUT_MS);
+		result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms);
 		if (result <= 0) {
 			return terminal_key_string("escape");
 		}
 	} while (sequence_len < sizeof(sequence) && !((sequence[sequence_len - 1] >= 'A' && sequence[sequence_len - 1] <= 'Z') || sequence[sequence_len - 1] == '~'));
 
 	return terminal_key_from_csi_sequence(sequence + 1, sequence_len - 1);
+}
+
+static int terminal_sequence_timeout_to_ms(double timeout, bool timeout_is_null)
+{
+	if (timeout_is_null) {
+		return TERMINAL_SEQUENCE_TIMEOUT_MS;
+	}
+
+	return terminal_timeout_to_ms(timeout, false);
 }
 
 static size_t terminal_utf8_sequence_len(unsigned char key)
@@ -969,7 +981,7 @@ static size_t terminal_utf8_sequence_len(unsigned char key)
 	return 1;
 }
 
-static zend_string *terminal_key_from_utf8_sequence(int fd, unsigned char key)
+static zend_string *terminal_key_from_utf8_sequence(int fd, unsigned char key, int sequence_timeout_ms)
 {
 	unsigned char sequence[4] = { key };
 	size_t sequence_len = terminal_utf8_sequence_len(key);
@@ -980,7 +992,7 @@ static zend_string *terminal_key_from_utf8_sequence(int fd, unsigned char key)
 	}
 
 	for (i = 1; i < sequence_len; i++) {
-		int result = terminal_read_byte(fd, &sequence[i], TERMINAL_ESCAPE_TIMEOUT_MS);
+		int result = terminal_read_byte(fd, &sequence[i], sequence_timeout_ms);
 
 		if (result != 1) {
 			return zend_string_init((const char *) sequence, i, false);
@@ -1006,7 +1018,7 @@ static void terminal_secret_append_utf8_sequence(int fd, smart_str *secret, unsi
 	}
 
 	for (i = 1; i < sequence_len; i++) {
-		int result = terminal_read_byte(fd, &sequence[i], TERMINAL_ESCAPE_TIMEOUT_MS);
+		int result = terminal_read_byte(fd, &sequence[i], TERMINAL_SEQUENCE_TIMEOUT_MS);
 
 		if (result != 1) {
 			smart_str_appendl(secret, (const char *) sequence, i);
@@ -1022,7 +1034,7 @@ static void terminal_secret_append_utf8_sequence(int fd, smart_str *secret, unsi
 	smart_str_appendl(secret, (const char *) sequence, sequence_len);
 }
 
-static zend_string *terminal_key_from_byte(int fd, unsigned char key)
+static zend_string *terminal_key_from_byte(int fd, unsigned char key, int sequence_timeout_ms)
 {
 	switch (key) {
 		case '\r':
@@ -1034,16 +1046,17 @@ static zend_string *terminal_key_from_byte(int fd, unsigned char key)
 		case '\b':
 			return terminal_key_string("backspace");
 		case 0x1b:
-			return terminal_key_from_escape_sequence(fd);
+			return terminal_key_from_escape_sequence(fd, sequence_timeout_ms);
 		default:
-			return terminal_key_from_utf8_sequence(fd, key);
+			return terminal_key_from_utf8_sequence(fd, key, sequence_timeout_ms);
 	}
 }
 
-static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null)
+static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
 {
 	int fd = terminal_fd_from_id(TERMINAL_STREAM_STDIN);
 	int timeout_ms = terminal_timeout_to_ms(timeout, timeout_is_null);
+	int sequence_timeout_ms = terminal_sequence_timeout_to_ms(sequence_timeout, sequence_timeout_is_null);
 	struct termios mode;
 	struct termios raw_mode;
 	unsigned char key;
@@ -1061,7 +1074,7 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 	}
 
 	if (terminal_read_byte(fd, &key, timeout_ms) == 1) {
-		result = terminal_key_from_byte(fd, key);
+		result = terminal_key_from_byte(fd, key, sequence_timeout_ms);
 	}
 
 	if (tcsetattr(fd, TCSANOW, &mode) != 0) {
@@ -1130,7 +1143,7 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 				goto restore;
 			case 0x1b:
 			{
-				zend_string *escape_key = terminal_key_from_escape_sequence(fd);
+				zend_string *escape_key = terminal_key_from_escape_sequence(fd, TERMINAL_SEQUENCE_TIMEOUT_MS);
 				bool is_escape = zend_string_equals_literal(escape_key, "escape");
 
 				zend_string_release(escape_key);
@@ -1360,13 +1373,16 @@ ZEND_METHOD(Terminal_Terminal, restoreMode)
 ZEND_METHOD(Terminal_Terminal, readKey)
 {
 	double timeout = 0;
+	double sequence_timeout = 0;
 	bool timeout_is_null = true;
+	bool sequence_timeout_is_null = true;
 	zend_string *key;
 	zend_object *key_case;
 
-	ZEND_PARSE_PARAMETERS_START(0, 1)
+	ZEND_PARSE_PARAMETERS_START(0, 2)
 		Z_PARAM_OPTIONAL
 		Z_PARAM_DOUBLE_OR_NULL(timeout, timeout_is_null)
+		Z_PARAM_DOUBLE_OR_NULL(sequence_timeout, sequence_timeout_is_null)
 	ZEND_PARSE_PARAMETERS_END();
 
 	if (!timeout_is_null && timeout < 0) {
@@ -1374,7 +1390,12 @@ ZEND_METHOD(Terminal_Terminal, readKey)
 		RETURN_THROWS();
 	}
 
-	key = terminal_read_stdin_key(timeout, timeout_is_null);
+	if (!sequence_timeout_is_null && sequence_timeout < 0) {
+		zend_argument_value_error(2, "must be greater than or equal to 0");
+		RETURN_THROWS();
+	}
+
+	key = terminal_read_stdin_key(timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null);
 	if (key == NULL) {
 		RETURN_FALSE;
 	}

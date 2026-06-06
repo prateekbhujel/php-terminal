@@ -54,7 +54,7 @@ final class Terminal
 
     public static function restoreMode(string $mode): bool {}
 
-    public static function readKey(?float $timeout = null): Key|string|false {}
+    public static function readKey(?float $timeout = null, ?float $sequenceTimeout = null): Key|string|false {}
 
     public static function readSecret(?float $timeout = null): string|false {}
 }

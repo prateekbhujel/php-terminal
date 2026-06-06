@@ -33,17 +33,22 @@ proc_close($process);
 <?php
 function read_key_from_child(string $input, float $timeout): string
 {
+    return read_key_chunks_from_child($input === '' ? [] : [[$input, 0]], $timeout, null);
+}
+
+function read_key_chunks_from_child(array $chunks, float $timeout, ?float $sequenceTimeout): string
+{
     $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
     $code = <<<'PHP'
 echo "ready\n";
-$key = Terminal\Terminal::readKey(%s);
+$key = Terminal\Terminal::readKey(%s, %s);
 if ($key instanceof Terminal\Key) {
     echo $key->name . ':' . $key->value . "\n";
 } else {
     var_dump($key);
 }
 PHP;
-    $code = sprintf($code, var_export($timeout, true));
+    $code = sprintf($code, var_export($timeout, true), var_export($sequenceTimeout, true));
     $command = escapeshellarg(PHP_BINARY) . ' -n -d extension=' . escapeshellarg($extension) . ' -r ' . escapeshellarg($code);
     $descriptors = [
         0 => ['pty'],
@@ -65,8 +70,14 @@ PHP;
         usleep(10000);
     }
 
-    if ($input !== '') {
-        fwrite($pipes[0], $input);
+    foreach ($chunks as [$input, $delayUs]) {
+        if ($delayUs > 0) {
+            usleep($delayUs);
+        }
+
+        if ($input !== '') {
+            fwrite($pipes[0], $input);
+        }
     }
 
     stream_set_blocking($pipes[1], true);
@@ -109,6 +120,9 @@ foreach ($cases as $name => [$input, $expected]) {
 
 $timeout = read_key_from_child('', 0.05);
 echo str_contains($timeout, 'bool(false)') ? "timeout\n" : $timeout;
+
+$delayedUp = read_key_chunks_from_child([["\033", 0], ["[A", 60000]], 1.0, 0.2);
+echo str_contains($delayedUp, 'Up:up') ? "delayed-up\n" : $delayedUp;
 ?>
 --EXPECT--
 printable
@@ -126,3 +140,4 @@ delete
 pageup
 pagedown
 timeout
+delayed-up
