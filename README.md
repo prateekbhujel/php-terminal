@@ -22,7 +22,7 @@ The core-oriented API is namespaced and uses enums for values with a fixed set o
 - `Terminal\Terminal::write(string $data, Terminal\Stream $stream = Terminal\Stream::Stdout): int|false`
 - `Terminal\Terminal::enableRawMode(Terminal\Stream $stream = Terminal\Stream::Stdin): string|false`
 - `Terminal\Terminal::restoreMode(string $mode): bool`
-- `Terminal\Terminal::readKey(?float $timeout = null): Terminal\Key|string|false`
+- `Terminal\Terminal::readKey(?float $timeout = null, ?float $sequenceTimeout = null): Terminal\Key|string|false`
 - `Terminal\Terminal::readSecret(?float $timeout = null): string|false`
 
 Enums:
@@ -36,6 +36,7 @@ Enums:
 `Terminal\Terminal::enableRawMode()` currently accepts `Terminal\Stream::Stdin` and returns an opaque mode token that should be passed back to `Terminal\Terminal::restoreMode()`.
 `Terminal\Terminal::enableRawMode()` leaves terminal output processing intact, so normal prompt output such as `"\n"` keeps working while input is read one key at a time.
 `Terminal\Terminal::readKey()` temporarily prepares standard input for key reads, restores the previous mode before returning, returns special keys as `Terminal\Key` cases, returns printable input as strings including UTF-8 input, and returns `false` when no key is available before the timeout.
+On POSIX, `$sequenceTimeout` controls how long `readKey()` waits for bytes that complete an escape or UTF-8 sequence after the first byte.
 Printable Unicode input is returned as the next encoded code point from the terminal, not as a full grapheme cluster.
 `Terminal\Terminal::readSecret()` reads a hidden line from standard input, restores the previous mode before returning, handles backspace and UTF-8 input, and returns `false` on timeout or abort.
 
