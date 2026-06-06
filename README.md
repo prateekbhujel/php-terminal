@@ -6,9 +6,9 @@ The first cut stays small on purpose. It exposes the pieces that are awkward to 
 
 Created and maintained by Pratik Bhujel.
 
-Current release: `v0.3.0`.
+Current release: `v0.4.0`.
 
-`v0.3.0` is the first release with the `Terminal\Terminal` class and enum API. The older `v0.2.0` release used the first procedural `terminal_*()` API.
+`v0.4.0` keeps the `Terminal\Terminal` class and enum API from `v0.3.0`, replaces raw-mode string handles with `Terminal\ModeToken`, and hardens key reads, resize handling, ANSI detection, and terminal-size fallbacks. The older `v0.2.0` release used the first procedural `terminal_*()` API.
 
 ## Current API
 
@@ -31,12 +31,13 @@ Enums:
 - `Terminal\Stream`: `Stdin`, `Stdout`, `Stderr`
 - `Terminal\Key`: `Up`, `Down`, `Left`, `Right`, `Enter`, `Backspace`, `Escape`, `Tab`, `Home`, `End`, `Delete`, `PageUp`, `PageDown`, `Resize`
 
-`Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals. `NO_COLOR` disables ANSI support checks.
+`Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals. A non-empty `NO_COLOR` disables ANSI support checks; `COLORTERM=truecolor`, `COLORTERM=24bit`, and `TERM_PROGRAM` are treated as positive terminal capability signals on POSIX TTYs.
 `Terminal\Terminal::write()` accepts `Terminal\Stream::Stdout` and `Terminal\Stream::Stderr`.
 `Terminal\Terminal::enableRawMode()` currently accepts `Terminal\Stream::Stdin` and returns an opaque `Terminal\ModeToken` that should be passed back to `Terminal\Terminal::restoreMode()`.
+`Terminal\ModeToken` is process-local, non-serializable, and intentionally has no public constructor or properties.
 `Terminal\Terminal::enableRawMode()` leaves terminal output processing intact, so normal prompt output such as `"\n"` keeps working while input is read one key at a time.
 On POSIX, raw-mode switches use `TCSANOW` so mode changes are immediate; callers that type ahead should not assume pending input was drained first.
-`Terminal\Terminal::readKey()` temporarily prepares standard input for key reads, restores the previous mode before returning, returns special keys as `Terminal\Key` cases, returns printable input as strings including UTF-8 input, and returns `false` when no key is available before the timeout.
+`Terminal\Terminal::readKey()` temporarily prepares standard input for key reads, restores the previous mode before returning, returns special keys as `Terminal\Key` cases, returns printable input as strings including UTF-8 input, and returns `false` when no key is available before the timeout. If standard input is already raw, `readKey()` preserves that state.
 On POSIX, `$sequenceTimeout` controls how long `readKey()` waits for bytes that complete an escape or UTF-8 sequence after the first byte.
 On POSIX, `SIGWINCH` during `readKey()` returns `Terminal\Key::Resize`.
 Printable Unicode input is returned as the next encoded code point from the terminal, not as a full grapheme cluster.
@@ -105,11 +106,11 @@ extension=terminal
 extension=php_terminal.dll
 ```
 
-## Installing v0.3.0
+## Installing v0.4.0
 
-The `v0.3.0` release is available at:
+The `v0.4.0` release is available at:
 
-https://github.com/prateekbhujel/php-terminal/releases/tag/v0.3.0
+https://github.com/prateekbhujel/php-terminal/releases/tag/v0.4.0
 
 Windows builds are attached for PHP 8.2-8.5, x64, TS/NTS. These are native Windows builds for normal Windows PHP runtimes, not WSL. Pick the zip that matches your PHP version and thread-safety mode, copy `php_terminal.dll` into your PHP extension directory, and enable it with:
 
@@ -122,7 +123,7 @@ Build from source on Unix-like systems:
 ```sh
 git clone https://github.com/prateekbhujel/php-terminal.git
 cd php-terminal
-git checkout v0.3.0
+git checkout v0.4.0
 phpize
 ./configure --enable-terminal
 make
@@ -139,7 +140,7 @@ For installed builds, use your normal `extension=terminal` configuration instead
 
 ### Build current main from source
 
-To test unreleased changes after `v0.3.0`:
+To test unreleased changes after `v0.4.0`:
 
 ```sh
 phpize
@@ -177,9 +178,9 @@ set PHP_BIN=C:\xampp\php\php.exe
 
 Download the matching zip from the release page. For example:
 
-- PHP 8.2, thread safety disabled: `php_terminal-v0.3.0-8.2-nts-vs16-x86_64.zip`
-- PHP 8.2, thread safety enabled: `php_terminal-v0.3.0-8.2-ts-vs16-x86_64.zip`
-- PHP 8.4, thread safety disabled: `php_terminal-v0.3.0-8.4-nts-vs17-x86_64.zip`
+- PHP 8.2, thread safety disabled: `php_terminal-v0.4.0-8.2-nts-vs16-x86_64.zip`
+- PHP 8.2, thread safety enabled: `php_terminal-v0.4.0-8.2-ts-vs16-x86_64.zip`
+- PHP 8.4, thread safety disabled: `php_terminal-v0.4.0-8.4-nts-vs17-x86_64.zip`
 
 Copy `php_terminal.dll` into that PHP installation's extension directory, for example:
 
@@ -315,7 +316,7 @@ Until Laravel Prompts has that adapter, existing Laravel Prompts releases will s
 
 The bundled `examples/prompt.php` file is intentionally small so framework authors can see the shape without reading a full TUI library.
 
-Future Laravel Prompts adapter work should target the `Terminal\Terminal` and enum API from `v0.3.0`.
+Future Laravel Prompts adapter work should target the `Terminal\Terminal` and enum API from `v0.4.0`.
 
 For release feedback, open a new issue with the OS, terminal, PHP version, extension version, what you tried, and the behavior you expected.
 
