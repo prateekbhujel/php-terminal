@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0 - 2026-06-06
+
+- Replaced raw-mode string handles with opaque `Terminal\ModeToken` objects.
+- Added `Terminal\Key::Resize` for POSIX `SIGWINCH` events surfaced by `Terminal\Terminal::readKey()`.
+- Added `Terminal\Terminal::readKey()` sequence-timeout control for delayed escape and UTF-8 continuation bytes.
+- Added terminal-size fallback to positive `COLUMNS` and `LINES` values.
+- Hardened ANSI detection with non-empty `NO_COLOR`, `COLORTERM=truecolor`, `COLORTERM=24bit`, and `TERM_PROGRAM`.
+- Hardened POSIX key-read timeout math with `CLOCK_MONOTONIC` when available.
+- Hardened malformed CSI escape handling.
+- Avoid redundant raw-mode enter/restore work when key or secret reads are called while the terminal is already raw.
+- Documented the POSIX `TCSANOW` tradeoff for immediate raw-mode switches.
+- Expanded examples, README, package metadata, and PHPT coverage for the new behavior.
+
 ## 0.3.0 - 2026-06-02
 
 - Added `Terminal\Terminal` as the core-oriented API surface.

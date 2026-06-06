@@ -25,6 +25,7 @@
 # include <sys/select.h>
 # include <sys/time.h>
 # include <termios.h>
+# include <time.h>
 # include <unistd.h>
 # include <sys/ioctl.h>
 #endif
@@ -234,17 +235,37 @@ static bool terminal_size_from_environment(zend_long *columns, zend_long *rows)
 	return result;
 }
 
-static bool terminal_no_color_is_set(void)
+static bool terminal_env_is_non_empty(const char *name, size_t name_len)
 {
-	zend_string *value = php_getenv("NO_COLOR", sizeof("NO_COLOR") - 1);
+	zend_string *value = php_getenv(name, name_len);
+	bool result;
 
 	if (value == NULL) {
 		return false;
 	}
 
+	result = ZSTR_LEN(value) > 0;
 	zend_string_release(value);
 
-	return true;
+	return result;
+}
+
+static bool terminal_env_equals_literal_ci(const char *name, size_t name_len, const char *literal, size_t literal_len)
+{
+	zend_string *value = php_getenv(name, name_len);
+	bool result = false;
+
+	if (value != NULL) {
+		result = zend_binary_strcasecmp(ZSTR_VAL(value), ZSTR_LEN(value), literal, literal_len) == 0;
+		zend_string_release(value);
+	}
+
+	return result;
+}
+
+static bool terminal_no_color_is_set(void)
+{
+	return terminal_env_is_non_empty("NO_COLOR", sizeof("NO_COLOR") - 1);
 }
 
 #ifdef PHP_WIN32
@@ -548,6 +569,7 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 	DWORD wait_ms = terminal_timeout_to_wait_ms(timeout, timeout_is_null);
 	ULONGLONG deadline_ms = wait_ms == INFINITE ? 0 : GetTickCount64() + wait_ms;
 	zend_string *result = NULL;
+	bool mode_changed = false;
 
 	(void) sequence_timeout;
 	(void) sequence_timeout_is_null;
@@ -557,9 +579,10 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 	}
 
 	raw_mode = terminal_make_raw_mode(mode);
-	if (!SetConsoleMode(handle, raw_mode)) {
+	if (raw_mode != mode && !SetConsoleMode(handle, raw_mode)) {
 		return NULL;
 	}
+	mode_changed = raw_mode != mode;
 
 	for (;;) {
 		INPUT_RECORD record;
@@ -595,7 +618,7 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 		}
 	}
 
-	if (!SetConsoleMode(handle, mode)) {
+	if (mode_changed && !SetConsoleMode(handle, mode)) {
 		if (result != NULL) {
 			zend_string_release(result);
 		}
@@ -616,15 +639,17 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 	smart_str secret = {0};
 	bool success = false;
 	bool failed = false;
+	bool mode_changed = false;
 
 	if (handle == INVALID_HANDLE_VALUE || handle == NULL || !GetConsoleMode(handle, &mode)) {
 		return NULL;
 	}
 
 	raw_mode = terminal_make_raw_mode(mode);
-	if (!SetConsoleMode(handle, raw_mode)) {
+	if (raw_mode != mode && !SetConsoleMode(handle, raw_mode)) {
 		return NULL;
 	}
+	mode_changed = raw_mode != mode;
 
 	for (;;) {
 		INPUT_RECORD record;
@@ -680,7 +705,7 @@ update_timeout:
 		}
 	}
 
-	if (!SetConsoleMode(handle, mode)) {
+	if (mode_changed && !SetConsoleMode(handle, mode)) {
 		smart_str_free(&secret);
 		return NULL;
 	}
@@ -780,7 +805,8 @@ static bool terminal_stream_is_tty(zend_long stream)
 
 static bool terminal_stream_supports_ansi(zend_long stream)
 {
-	const char *term;
+	zend_string *term;
+	bool has_term;
 
 	if (terminal_no_color_is_set()) {
 		return false;
@@ -790,12 +816,19 @@ static bool terminal_stream_supports_ansi(zend_long stream)
 		return false;
 	}
 
-	term = getenv("TERM");
-	if (term == NULL || *term == '\0' || strcmp(term, "dumb") == 0) {
-		return false;
+	if (terminal_env_equals_literal_ci("COLORTERM", sizeof("COLORTERM") - 1, "truecolor", sizeof("truecolor") - 1)
+		|| terminal_env_equals_literal_ci("COLORTERM", sizeof("COLORTERM") - 1, "24bit", sizeof("24bit") - 1)) {
+		return true;
 	}
 
-	return true;
+	term = php_getenv("TERM", sizeof("TERM") - 1);
+	has_term = term != NULL && ZSTR_LEN(term) > 0
+		&& zend_binary_strcasecmp(ZSTR_VAL(term), ZSTR_LEN(term), "dumb", sizeof("dumb") - 1) != 0;
+	if (term != NULL) {
+		zend_string_release(term);
+	}
+
+	return has_term || terminal_env_is_non_empty("TERM_PROGRAM", sizeof("TERM_PROGRAM") - 1);
 }
 
 static bool terminal_enable_stream_ansi(zend_long stream)
@@ -908,6 +941,14 @@ static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
 
 static int64_t terminal_current_time_ms(void)
 {
+#ifdef CLOCK_MONOTONIC
+	struct timespec monotonic_now;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &monotonic_now) == 0) {
+		return ((int64_t) monotonic_now.tv_sec * 1000) + (monotonic_now.tv_nsec / 1000000);
+	}
+#endif
+
 	struct timeval now;
 
 	if (gettimeofday(&now, NULL) != 0) {
@@ -962,7 +1003,7 @@ static int terminal_wait_for_input(int fd, int timeout_ms)
 	return select(fd + 1, &readfds, NULL, NULL, timeout_ptr);
 }
 
-static int terminal_read_byte(int fd, unsigned char *byte, int timeout_ms)
+static int terminal_read_byte(int fd, unsigned char *byte, int timeout_ms, bool report_resize)
 {
 	int64_t deadline_ms = timeout_ms > 0 ? terminal_current_time_ms() + timeout_ms : 0;
 
@@ -989,7 +1030,11 @@ static int terminal_read_byte(int fd, unsigned char *byte, int timeout_ms)
 		if (ready < 0) {
 			if (errno == EINTR) {
 				if (terminal_consume_resize_pending()) {
-					return TERMINAL_READ_RESIZE;
+					if (report_resize) {
+						return TERMINAL_READ_RESIZE;
+					}
+
+					continue;
 				}
 
 				continue;
@@ -1006,7 +1051,11 @@ static int terminal_read_byte(int fd, unsigned char *byte, int timeout_ms)
 		if (bytes_read < 0) {
 			if (errno == EINTR) {
 				if (terminal_consume_resize_pending()) {
-					return TERMINAL_READ_RESIZE;
+					if (report_resize) {
+						return TERMINAL_READ_RESIZE;
+					}
+
+					continue;
 				}
 
 				continue;
@@ -1032,7 +1081,13 @@ static int terminal_read_byte(int fd, unsigned char *byte, int timeout_ms)
 
 static zend_string *terminal_key_from_csi_sequence(const unsigned char *sequence, size_t sequence_len)
 {
-	unsigned char final = sequence[sequence_len - 1];
+	unsigned char final;
+
+	if (sequence_len == 0) {
+		return terminal_key_string("escape");
+	}
+
+	final = sequence[sequence_len - 1];
 
 	switch (final) {
 		case 'A':
@@ -1067,19 +1122,24 @@ static zend_string *terminal_key_from_csi_sequence(const unsigned char *sequence
 	return terminal_key_string("escape");
 }
 
+static bool terminal_is_csi_final_byte(unsigned char key)
+{
+	return (key >= 'A' && key <= 'Z') || key == '~';
+}
+
 static zend_string *terminal_key_from_escape_sequence(int fd, int sequence_timeout_ms)
 {
 	unsigned char sequence[8];
 	size_t sequence_len = 0;
-	int result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms);
+	int result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms, false);
 
-	if (result <= 0) {
+	if (result != 1) {
 		return terminal_key_string("escape");
 	}
 
 	if (sequence[0] == 'O') {
-		result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms);
-		if (result <= 0) {
+		result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms, false);
+		if (result != 1) {
 			return terminal_key_string("escape");
 		}
 
@@ -1090,14 +1150,18 @@ static zend_string *terminal_key_from_escape_sequence(int fd, int sequence_timeo
 		return terminal_key_string("escape");
 	}
 
-	do {
-		result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms);
-		if (result <= 0) {
+	while (sequence_len < sizeof(sequence)) {
+		result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms, false);
+		if (result != 1) {
 			return terminal_key_string("escape");
 		}
-	} while (sequence_len < sizeof(sequence) && !((sequence[sequence_len - 1] >= 'A' && sequence[sequence_len - 1] <= 'Z') || sequence[sequence_len - 1] == '~'));
 
-	return terminal_key_from_csi_sequence(sequence + 1, sequence_len - 1);
+		if (terminal_is_csi_final_byte(sequence[sequence_len - 1])) {
+			return terminal_key_from_csi_sequence(sequence + 1, sequence_len - 1);
+		}
+	}
+
+	return terminal_key_string("escape");
 }
 
 static int terminal_sequence_timeout_to_ms(double timeout, bool timeout_is_null)
@@ -1137,7 +1201,7 @@ static zend_string *terminal_key_from_utf8_sequence(int fd, unsigned char key, i
 	}
 
 	for (i = 1; i < sequence_len; i++) {
-		int result = terminal_read_byte(fd, &sequence[i], sequence_timeout_ms);
+		int result = terminal_read_byte(fd, &sequence[i], sequence_timeout_ms, false);
 
 		if (result != 1) {
 			return zend_string_init((const char *) sequence, i, false);
@@ -1163,7 +1227,7 @@ static void terminal_secret_append_utf8_sequence(int fd, smart_str *secret, unsi
 	}
 
 	for (i = 1; i < sequence_len; i++) {
-		int result = terminal_read_byte(fd, &sequence[i], TERMINAL_SEQUENCE_TIMEOUT_MS);
+		int result = terminal_read_byte(fd, &sequence[i], TERMINAL_SEQUENCE_TIMEOUT_MS, false);
 
 		if (result != 1) {
 			smart_str_appendl(secret, (const char *) sequence, i);
@@ -1207,6 +1271,7 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 	unsigned char key;
 	int read_result;
 	zend_string *result = NULL;
+	bool mode_changed;
 #ifdef SIGWINCH
 	struct sigaction old_resize_action;
 #endif
@@ -1226,8 +1291,9 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 
 	raw_mode = mode;
 	terminal_make_raw_mode(&raw_mode);
+	mode_changed = memcmp(&raw_mode, &mode, sizeof(mode)) != 0;
 
-	if (tcsetattr(fd, TCSANOW, &raw_mode) != 0) {
+	if (mode_changed && tcsetattr(fd, TCSANOW, &raw_mode) != 0) {
 		if (resize_handler_installed) {
 			terminal_restore_resize_handler(
 #ifdef SIGWINCH
@@ -1241,14 +1307,14 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 		return NULL;
 	}
 
-	read_result = terminal_read_byte(fd, &key, timeout_ms);
+	read_result = terminal_read_byte(fd, &key, timeout_ms, true);
 	if (read_result == TERMINAL_READ_RESIZE) {
 		result = terminal_key_string("resize");
 	} else if (read_result == 1) {
 		result = terminal_key_from_byte(fd, key, sequence_timeout_ms);
 	}
 
-	if (tcsetattr(fd, TCSANOW, &mode) != 0) {
+	if (mode_changed && tcsetattr(fd, TCSANOW, &mode) != 0) {
 		if (resize_handler_installed) {
 			terminal_restore_resize_handler(
 #ifdef SIGWINCH
@@ -1288,6 +1354,7 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 	struct termios raw_mode;
 	smart_str secret = {0};
 	bool success = false;
+	bool mode_changed;
 
 	if (fd < 0 || isatty(fd) != 1 || tcgetattr(fd, &mode) != 0) {
 		return NULL;
@@ -1295,8 +1362,9 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 
 	raw_mode = mode;
 	terminal_make_raw_mode(&raw_mode);
+	mode_changed = memcmp(&raw_mode, &mode, sizeof(mode)) != 0;
 
-	if (tcsetattr(fd, TCSANOW, &raw_mode) != 0) {
+	if (mode_changed && tcsetattr(fd, TCSANOW, &raw_mode) != 0) {
 		return NULL;
 	}
 
@@ -1315,7 +1383,7 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 			wait_ms = remaining_ms > INT_MAX ? INT_MAX : (int) remaining_ms;
 		}
 
-		result = terminal_read_byte(fd, &key, wait_ms);
+		result = terminal_read_byte(fd, &key, wait_ms, false);
 		if (result != 1) {
 			break;
 		}
@@ -1354,7 +1422,7 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 	}
 
 restore:
-	if (tcsetattr(fd, TCSANOW, &mode) != 0) {
+	if (mode_changed && tcsetattr(fd, TCSANOW, &mode) != 0) {
 		smart_str_free(&secret);
 		return NULL;
 	}

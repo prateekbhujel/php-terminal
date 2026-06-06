@@ -66,7 +66,17 @@ PHP;
 
 echo supports_ansi_with_env(['TERM' => 'xterm-256color']);
 echo supports_ansi_with_env(['TERM' => 'xterm-256color', 'NO_COLOR' => '1']);
+echo supports_ansi_with_env(['TERM' => 'xterm-256color', 'NO_COLOR' => '']);
+echo supports_ansi_with_env(['TERM' => 'dumb', 'COLORTERM' => 'truecolor']);
+echo supports_ansi_with_env(['TERM' => 'dumb', 'COLORTERM' => '24bit']);
+echo supports_ansi_with_env(['TERM' => 'dumb', 'TERM_PROGRAM' => 'Apple_Terminal']);
+echo supports_ansi_with_env(['TERM' => 'dumb']);
 ?>
 --EXPECT--
+bool(true)
+bool(false)
+bool(true)
+bool(true)
+bool(true)
 bool(true)
 bool(false)
