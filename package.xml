@@ -20,8 +20,8 @@
     </lead>
     <date>2026-06-06</date>
     <version>
-        <release>0.4.0</release>
-        <api>0.4.0</api>
+        <release>0.4.1</release>
+        <api>0.4.1</api>
     </version>
     <stability>
         <release>beta</release>
@@ -29,14 +29,9 @@
     </stability>
     <license uri="https://www.php.net/license/3_01.txt">PHP License</license>
     <notes>
-        - Replaced raw-mode string handles with opaque Terminal\ModeToken objects.
-        - Added Terminal\Key::Resize for POSIX SIGWINCH events surfaced by Terminal\Terminal::readKey().
-        - Added sequence-timeout control for delayed escape and UTF-8 continuation bytes.
-        - Added terminal-size fallback to positive COLUMNS and LINES values.
-        - Hardened ANSI detection with non-empty NO_COLOR, COLORTERM truecolor/24bit, and TERM_PROGRAM.
-        - Hardened POSIX key-read timeout math with CLOCK_MONOTONIC when available.
-        - Hardened malformed CSI escape handling and raw-mode re-entry paths.
-        - Updated examples, docs, package metadata, and PHPT coverage.
+        - Added Windows resize-event support: ReadConsoleInputW WINDOW_BUFFER_SIZE_EVENT now returns Terminal\Key::Resize.
+        - Documented the default 25ms POSIX sequence timeout used by Terminal\Terminal::readKey().
+        - Documented current key-input scope, including UTF-8 code point behavior, control-byte behavior, and function-key/modifier limitations.
     </notes>
     <contents>
         <dir name="/">

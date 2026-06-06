@@ -6,9 +6,28 @@ The first cut stays small on purpose. It exposes the pieces that are awkward to 
 
 Created and maintained by Pratik Bhujel.
 
-Current release: `v0.4.0`.
+Current release: `v0.4.1`.
 
-`v0.4.0` keeps the `Terminal\Terminal` class and enum API from `v0.3.0`, replaces raw-mode string handles with `Terminal\ModeToken`, and hardens key reads, resize handling, ANSI detection, and terminal-size fallbacks. The older `v0.2.0` release used the first procedural `terminal_*()` API.
+`v0.4.1` keeps the `Terminal\Terminal` class and enum API from `v0.3.0`, replaces raw-mode string handles with `Terminal\ModeToken`, and hardens key reads, resize handling, ANSI detection, and terminal-size fallbacks. The older `v0.2.0` release used the first procedural `terminal_*()` API.
+
+## Why this exists
+
+PHP already has useful pieces such as `stream_isatty()` and `sapi_windows_vt100_support()`, but there is still no small extension that exposes a shared terminal capability layer across Unix and Windows.
+
+The main goal is native Windows parity for PHP CLI prompts and terminal apps. Users should not need WSL just to get arrow keys, raw mode, terminal size, and safe restore behavior that already work on macOS and Linux.
+
+This also removes two common framework workarounds: spawning `stty`/`mode CON` helpers for terminal state, and bundling a Windows-only helper executable just to read hidden password input.
+
+Older console-oriented extensions took different paths:
+
+- `ncurses` and `termbox` wrap external terminal libraries
+- `php-wcli` is Windows-only
+
+This extension stays narrower:
+
+- no ncurses dependency
+- no framework coupling
+- one user-facing API on both backends
 
 ## Current API
 
@@ -38,10 +57,18 @@ Enums:
 `Terminal\Terminal::enableRawMode()` leaves terminal output processing intact, so normal prompt output such as `"\n"` keeps working while input is read one key at a time.
 On POSIX, raw-mode switches use `TCSANOW` so mode changes are immediate; callers that type ahead should not assume pending input was drained first.
 `Terminal\Terminal::readKey()` temporarily prepares standard input for key reads, restores the previous mode before returning, returns special keys as `Terminal\Key` cases, returns printable input as strings including UTF-8 input, and returns `false` when no key is available before the timeout. If standard input is already raw, `readKey()` preserves that state.
-On POSIX, `$sequenceTimeout` controls how long `readKey()` waits for bytes that complete an escape or UTF-8 sequence after the first byte.
-On POSIX, `SIGWINCH` during `readKey()` returns `Terminal\Key::Resize`.
+On POSIX, `$sequenceTimeout` controls how long `readKey()` waits for bytes that complete an escape or UTF-8 sequence after the first byte. `null` uses the default 25ms sequence timeout.
+POSIX `SIGWINCH` and Windows `WINDOW_BUFFER_SIZE_EVENT` during `readKey()` return `Terminal\Key::Resize`.
 Printable Unicode input is returned as the next encoded code point from the terminal, not as a full grapheme cluster.
 `Terminal\Terminal::readSecret()` reads a hidden line from standard input, restores the previous mode before returning, handles backspace and UTF-8 input, and returns `false` on timeout or abort.
+
+Current key input scope:
+
+- normalized keys: arrows, enter, backspace, escape, tab, home, end, delete, page up, page down, resize
+- printable input: returned as a string containing the next encoded code point
+- control bytes such as Ctrl+C: returned as single-byte strings by `readKey()`
+- not normalized yet: F1-F12, modifier combinations, and full grapheme clusters
+- unknown POSIX escape sequences: fall back to `Terminal\Key::Escape`
 
 The earlier procedural API was removed while the project is still pre-1.0 so the extension can track the PHP core discussion more closely.
 
@@ -71,25 +98,6 @@ try {
 }
 ```
 
-## Why this exists
-
-PHP already has useful pieces such as `stream_isatty()` and `sapi_windows_vt100_support()`, but there is still no small extension that exposes a shared terminal capability layer across Unix and Windows.
-
-The main goal is native Windows parity for PHP CLI prompts and terminal apps. Users should not need WSL just to get arrow keys, raw mode, terminal size, and safe restore behavior that already work on macOS and Linux.
-
-This also removes two common framework workarounds: spawning `stty`/`mode CON` helpers for terminal state, and bundling a Windows-only helper executable just to read hidden password input.
-
-Older console-oriented extensions took different paths:
-
-- `ncurses` and `termbox` wrap external terminal libraries
-- `php-wcli` is Windows-only
-
-This extension stays narrower:
-
-- no ncurses dependency
-- no framework coupling
-- one user-facing API on both backends
-
 ## Enabling the extension
 
 After you build and install it, enable it like any normal PHP extension:
@@ -106,11 +114,11 @@ extension=terminal
 extension=php_terminal.dll
 ```
 
-## Installing v0.4.0
+## Installing v0.4.1
 
-The `v0.4.0` release is available at:
+The `v0.4.1` release is available at:
 
-https://github.com/prateekbhujel/php-terminal/releases/tag/v0.4.0
+https://github.com/prateekbhujel/php-terminal/releases/tag/v0.4.1
 
 Windows builds are attached for PHP 8.2-8.5, x64, TS/NTS. These are native Windows builds for normal Windows PHP runtimes, not WSL. Pick the zip that matches your PHP version and thread-safety mode, copy `php_terminal.dll` into your PHP extension directory, and enable it with:
 
@@ -123,7 +131,7 @@ Build from source on Unix-like systems:
 ```sh
 git clone https://github.com/prateekbhujel/php-terminal.git
 cd php-terminal
-git checkout v0.4.0
+git checkout v0.4.1
 phpize
 ./configure --enable-terminal
 make
@@ -140,7 +148,7 @@ For installed builds, use your normal `extension=terminal` configuration instead
 
 ### Build current main from source
 
-To test unreleased changes after `v0.4.0`:
+To test unreleased changes after `v0.4.1`:
 
 ```sh
 phpize
@@ -178,9 +186,9 @@ set PHP_BIN=C:\xampp\php\php.exe
 
 Download the matching zip from the release page. For example:
 
-- PHP 8.2, thread safety disabled: `php_terminal-v0.4.0-8.2-nts-vs16-x86_64.zip`
-- PHP 8.2, thread safety enabled: `php_terminal-v0.4.0-8.2-ts-vs16-x86_64.zip`
-- PHP 8.4, thread safety disabled: `php_terminal-v0.4.0-8.4-nts-vs17-x86_64.zip`
+- PHP 8.2, thread safety disabled: `php_terminal-v0.4.1-8.2-nts-vs16-x86_64.zip`
+- PHP 8.2, thread safety enabled: `php_terminal-v0.4.1-8.2-ts-vs16-x86_64.zip`
+- PHP 8.4, thread safety disabled: `php_terminal-v0.4.1-8.4-nts-vs17-x86_64.zip`
 
 Copy `php_terminal.dll` into that PHP installation's extension directory, for example:
 
@@ -316,7 +324,7 @@ Until Laravel Prompts has that adapter, existing Laravel Prompts releases will s
 
 The bundled `examples/prompt.php` file is intentionally small so framework authors can see the shape without reading a full TUI library.
 
-Future Laravel Prompts adapter work should target the `Terminal\Terminal` and enum API from `v0.4.0`.
+Future Laravel Prompts adapter work should target the `Terminal\Terminal` and enum API from `v0.4.1`.
 
 For release feedback, open a new issue with the OS, terminal, PHP version, extension version, what you tried, and the behavior you expected.
 
