@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 - 2026-06-06
+
+- Added Windows resize-event support: `ReadConsoleInputW()` `WINDOW_BUFFER_SIZE_EVENT` now returns `Terminal\Key::Resize`.
+- Documented the default 25ms POSIX sequence timeout used by `Terminal\Terminal::readKey()`.
+- Documented current key-input scope, including UTF-8 code point behavior, control-byte behavior, and function-key/modifier limitations.
+
 ## 0.4.0 - 2026-06-06
 
 - Replaced raw-mode string handles with opaque `Terminal\ModeToken` objects.

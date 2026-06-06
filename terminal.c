@@ -601,6 +601,11 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 			break;
 		}
 
+		if (record.EventType == WINDOW_BUFFER_SIZE_EVENT) {
+			result = terminal_key_string("resize");
+			break;
+		}
+
 		if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown) {
 			zend_string *key = terminal_key_from_input_record(&record.Event.KeyEvent);
 
