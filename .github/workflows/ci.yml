@@ -38,11 +38,10 @@ jobs:
 
   windows:
     runs-on: windows-2022
-    continue-on-error: ${{ matrix.php-version == 'master' }}
     strategy:
       fail-fast: false
       matrix:
-        php-version: ['8.2', '8.3', '8.4', '8.5', 'master']
+        php-version: ['8.2', '8.3', '8.4', '8.5']
         arch: ['x64']
         ts: ['nts', 'ts']
     steps:
