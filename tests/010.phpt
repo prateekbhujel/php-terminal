@@ -5,6 +5,7 @@ terminal
 --FILE--
 <?php
 use Terminal\Backend;
+use Terminal\ModeToken;
 use Terminal\Stream;
 use Terminal\Terminal;
 
@@ -30,6 +31,7 @@ foreach (['TERMINAL_STDIN', 'TERMINAL_STDOUT', 'TERMINAL_STDERR'] as $constant) 
 }
 
 var_dump(Terminal::getBackend() instanceof Backend);
+var_dump(class_exists(ModeToken::class));
 var_dump(Terminal::isTty(Stream::Stdout) === Terminal::isTty());
 var_dump(Terminal::supportsAnsi(Stream::Stdout) === Terminal::supportsAnsi());
 
@@ -59,6 +61,7 @@ bool(false)
 bool(false)
 bool(false)
 bool(false)
+bool(true)
 bool(true)
 bool(true)
 bool(true)

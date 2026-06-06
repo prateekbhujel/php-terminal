@@ -34,6 +34,12 @@ enum Key: string
     case Delete = 'delete';
     case PageUp = 'pageup';
     case PageDown = 'pagedown';
+    case Resize = 'resize';
+}
+
+final class ModeToken
+{
+    private function __construct() {}
 }
 
 final class Terminal
@@ -50,9 +56,9 @@ final class Terminal
 
     public static function write(string $data, Stream $stream = Stream::Stdout): int|false {}
 
-    public static function enableRawMode(Stream $stream = Stream::Stdin): string|false {}
+    public static function enableRawMode(Stream $stream = Stream::Stdin): ModeToken|false {}
 
-    public static function restoreMode(string $mode): bool {}
+    public static function restoreMode(ModeToken $mode): bool {}
 
     public static function readKey(?float $timeout = null, ?float $sequenceTimeout = null): Key|string|false {}
 

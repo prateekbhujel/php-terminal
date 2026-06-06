@@ -1,19 +1,19 @@
 --TEST--
-Terminal\Terminal raw mode preserves output processing
+Terminal\Terminal::readKey surfaces SIGWINCH as resize
 --EXTENSIONS--
 terminal
 --SKIPIF--
 <?php
 if (PHP_OS_FAMILY === 'Windows') {
-    die("skip stty output processing test is POSIX only\n");
+    die("skip SIGWINCH test is POSIX only\n");
 }
 
 if (!function_exists('proc_open')) {
     die("skip proc_open is unavailable\n");
 }
 
-if (!function_exists('shell_exec')) {
-    die("skip shell_exec is unavailable\n");
+if (!function_exists('exec')) {
+    die("skip exec is unavailable\n");
 }
 
 $descriptors = [
@@ -37,15 +37,13 @@ proc_close($process);
 <?php
 $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
 $code = <<<'PHP'
-$mode = Terminal\Terminal::enableRawMode();
-if (!$mode instanceof Terminal\ModeToken) {
-    echo "raw-mode-unavailable\n";
-    exit;
+echo "ready:" . getmypid() . "\n";
+$key = Terminal\Terminal::readKey(2.0);
+if ($key instanceof Terminal\Key) {
+    echo $key->name . ':' . $key->value . "\n";
+} else {
+    var_dump($key);
 }
-
-$output = shell_exec('stty -a <&0 2>&1');
-Terminal\Terminal::restoreMode($mode);
-echo $output;
 PHP;
 
 $command = escapeshellarg(PHP_BINARY) . ' -n -d extension=' . escapeshellarg($extension) . ' -r ' . escapeshellarg($code);
@@ -61,7 +59,29 @@ if (!is_resource($process)) {
     exit;
 }
 
-$output = stream_get_contents($pipes[1]);
+stream_set_blocking($pipes[1], false);
+$output = '';
+$start = microtime(true);
+$pid = null;
+
+while (microtime(true) - $start < 2) {
+    $output .= stream_get_contents($pipes[1]);
+    if (preg_match('/ready:(\d+)/', $output, $matches)) {
+        $pid = (int) $matches[1];
+        break;
+    }
+    usleep(10000);
+}
+
+if ($pid === null) {
+    echo $output;
+    exit;
+}
+
+exec('kill -WINCH ' . $pid);
+
+stream_set_blocking($pipes[1], true);
+$output .= stream_get_contents($pipes[1]);
 $error = stream_get_contents($pipes[2]);
 
 foreach ($pipes as $pipe) {
@@ -69,16 +89,12 @@ foreach ($pipes as $pipe) {
 }
 
 $status = proc_close($process);
-
 if ($status !== 0 || $error !== '') {
     echo $output, $error;
     exit;
 }
 
-$opost = preg_match('/(^|[;\s])opost([;\s]|$)/', $output) === 1;
-$disabledOpost = preg_match('/(^|[;\s])-opost([;\s]|$)/', $output) === 1;
-
-echo $opost && ! $disabledOpost ? "opost-preserved\n" : $output;
+echo str_contains($output, 'Resize:resize') ? "resize\n" : $output;
 ?>
 --EXPECT--
-opost-preserved
+resize

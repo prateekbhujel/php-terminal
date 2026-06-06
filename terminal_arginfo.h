@@ -1,5 +1,8 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 50dee8855ef48a2e489bc3ab0d2f2312ac54f555 */
+ * Stub hash: 5f17fd1868f7f1a4eddfdc9ac1a9e3437e3f5330 */
+
+ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Terminal_ModeToken___construct, 0, 0, 0)
+ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Terminal_Terminal_getBackend, 0, 0, Terminal\\Backend, 0)
 ZEND_END_ARG_INFO()
@@ -21,12 +24,12 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_write, 0
 	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, stream, Terminal\\Stream, 0, "Terminal\\Stream::Stdout")
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_enableRawMode, 0, 0, MAY_BE_STRING|MAY_BE_FALSE)
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_enableRawMode, 0, 0, Terminal\\ModeToken, MAY_BE_FALSE)
 	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, stream, Terminal\\Stream, 0, "Terminal\\Stream::Stdin")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Terminal_Terminal_restoreMode, 0, 1, _IS_BOOL, 0)
-	ZEND_ARG_TYPE_INFO(0, mode, IS_STRING, 0)
+	ZEND_ARG_OBJ_INFO(0, mode, Terminal\\ModeToken, 0)
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_readKey, 0, 0, Terminal\\Key, MAY_BE_STRING|MAY_BE_FALSE)
@@ -38,6 +41,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_readSecr
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, timeout, IS_DOUBLE, 1, "null")
 ZEND_END_ARG_INFO()
 
+ZEND_METHOD(Terminal_ModeToken, __construct);
 ZEND_METHOD(Terminal_Terminal, getBackend);
 ZEND_METHOD(Terminal_Terminal, isTty);
 ZEND_METHOD(Terminal_Terminal, supportsAnsi);
@@ -48,6 +52,11 @@ ZEND_METHOD(Terminal_Terminal, enableRawMode);
 ZEND_METHOD(Terminal_Terminal, restoreMode);
 ZEND_METHOD(Terminal_Terminal, readKey);
 ZEND_METHOD(Terminal_Terminal, readSecret);
+
+static const zend_function_entry class_Terminal_ModeToken_methods[] = {
+	ZEND_ME(Terminal_ModeToken, __construct, arginfo_class_Terminal_ModeToken___construct, ZEND_ACC_PRIVATE)
+	ZEND_FE_END
+};
 
 static const zend_function_entry class_Terminal_Terminal_methods[] = {
 	ZEND_ME(Terminal_Terminal, getBackend, arginfo_class_Terminal_Terminal_getBackend, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
@@ -167,6 +176,22 @@ static zend_class_entry *register_class_Terminal_Key(void)
 	zend_string *enum_case_PageDown_value_str = zend_string_init("pagedown", strlen("pagedown"), 1);
 	ZVAL_STR(&enum_case_PageDown_value, enum_case_PageDown_value_str);
 	zend_enum_add_case_cstr(class_entry, "PageDown", &enum_case_PageDown_value);
+
+	zval enum_case_Resize_value;
+	zend_string *enum_case_Resize_value_str = zend_string_init("resize", strlen("resize"), 1);
+	ZVAL_STR(&enum_case_Resize_value, enum_case_Resize_value_str);
+	zend_enum_add_case_cstr(class_entry, "Resize", &enum_case_Resize_value);
+
+	return class_entry;
+}
+
+static zend_class_entry *register_class_Terminal_ModeToken(void)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "Terminal", "ModeToken", class_Terminal_ModeToken_methods);
+	class_entry = zend_register_internal_class_ex(&ce, NULL);
+	class_entry->ce_flags |= ZEND_ACC_FINAL;
 
 	return class_entry;
 }
