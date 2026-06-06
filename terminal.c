@@ -14,12 +14,14 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <stddef.h>
 #include <stdlib.h>
 
 #ifdef PHP_WIN32
 # include <windows.h>
 #else
 # include <stdint.h>
+# include <signal.h>
 # include <sys/select.h>
 # include <sys/time.h>
 # include <termios.h>
@@ -41,9 +43,58 @@ typedef struct _terminal_saved_mode {
 #endif
 } terminal_saved_mode;
 
+typedef struct _terminal_mode_token_object {
+	terminal_saved_mode saved;
+	bool valid;
+	zend_object std;
+} terminal_mode_token_object;
+
 static zend_class_entry *terminal_backend_ce;
 static zend_class_entry *terminal_stream_ce;
 static zend_class_entry *terminal_key_ce;
+static zend_class_entry *terminal_mode_token_ce;
+static zend_object_handlers terminal_mode_token_handlers;
+
+static inline terminal_mode_token_object *terminal_mode_token_from_obj(zend_object *obj)
+{
+	return (terminal_mode_token_object *) ((char *) obj - offsetof(terminal_mode_token_object, std));
+}
+
+#define Z_TERMINAL_MODE_TOKEN_P(zv) terminal_mode_token_from_obj(Z_OBJ_P(zv))
+
+static zend_object *terminal_mode_token_create_object(zend_class_entry *ce)
+{
+	terminal_mode_token_object *intern = zend_object_alloc(sizeof(terminal_mode_token_object), ce);
+
+	memset(&intern->saved, 0, sizeof(intern->saved));
+	intern->valid = false;
+
+	zend_object_std_init(&intern->std, ce);
+	object_properties_init(&intern->std, ce);
+	intern->std.handlers = &terminal_mode_token_handlers;
+
+	return &intern->std;
+}
+
+static void terminal_mode_token_free_obj(zend_object *object)
+{
+	terminal_mode_token_object *intern = terminal_mode_token_from_obj(object);
+
+	memset(&intern->saved, 0, sizeof(intern->saved));
+	intern->valid = false;
+
+	zend_object_std_dtor(&intern->std);
+}
+
+static void terminal_create_mode_token(zval *return_value, const terminal_saved_mode *saved)
+{
+	terminal_mode_token_object *intern;
+
+	object_init_ex(return_value, terminal_mode_token_ce);
+	intern = Z_TERMINAL_MODE_TOKEN_P(return_value);
+	intern->saved = *saved;
+	intern->valid = true;
+}
 
 static zend_string *terminal_key_string(const char *key)
 {
@@ -105,6 +156,9 @@ static zend_object *terminal_key_enum_from_string(zend_string *key)
 	}
 	if (zend_string_equals_literal(key, "pagedown")) {
 		return zend_enum_get_case_cstr(terminal_key_ce, "PageDown");
+	}
+	if (zend_string_equals_literal(key, "resize")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "Resize");
 	}
 
 	return NULL;
@@ -180,6 +234,19 @@ static bool terminal_size_from_environment(zend_long *columns, zend_long *rows)
 	return result;
 }
 
+static bool terminal_no_color_is_set(void)
+{
+	zend_string *value = php_getenv("NO_COLOR", sizeof("NO_COLOR") - 1);
+
+	if (value == NULL) {
+		return false;
+	}
+
+	zend_string_release(value);
+
+	return true;
+}
+
 #ifdef PHP_WIN32
 static HANDLE terminal_handle_from_id(zend_long stream)
 {
@@ -210,6 +277,10 @@ static bool terminal_stream_supports_ansi(zend_long stream)
 	HANDLE handle = terminal_handle_from_id(stream);
 	DWORD mode;
 
+	if (terminal_no_color_is_set()) {
+		return false;
+	}
+
 	if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
 		return false;
 	}
@@ -225,6 +296,10 @@ static bool terminal_enable_stream_ansi(zend_long stream)
 {
 	HANDLE handle = terminal_handle_from_id(stream);
 	DWORD mode;
+
+	if (terminal_no_color_is_set()) {
+		return false;
+	}
 
 	if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
 		return false;
@@ -624,6 +699,64 @@ update_timeout:
 	return secret.s;
 }
 #else
+#define TERMINAL_READ_RESIZE 2
+
+#ifdef SIGWINCH
+static volatile sig_atomic_t terminal_resize_pending = 0;
+
+static void terminal_sigwinch_handler(int signo)
+{
+	(void) signo;
+
+	terminal_resize_pending = 1;
+}
+
+static bool terminal_install_resize_handler(struct sigaction *old_action)
+{
+	struct sigaction action;
+
+	terminal_resize_pending = 0;
+
+	memset(&action, 0, sizeof(action));
+	action.sa_handler = terminal_sigwinch_handler;
+	sigemptyset(&action.sa_mask);
+
+	return sigaction(SIGWINCH, &action, old_action) == 0;
+}
+
+static void terminal_restore_resize_handler(const struct sigaction *old_action)
+{
+	sigaction(SIGWINCH, old_action, NULL);
+}
+
+static bool terminal_consume_resize_pending(void)
+{
+	if (terminal_resize_pending) {
+		terminal_resize_pending = 0;
+		return true;
+	}
+
+	return false;
+}
+#else
+static bool terminal_install_resize_handler(void *old_action)
+{
+	(void) old_action;
+
+	return false;
+}
+
+static void terminal_restore_resize_handler(const void *old_action)
+{
+	(void) old_action;
+}
+
+static bool terminal_consume_resize_pending(void)
+{
+	return false;
+}
+#endif
+
 static int terminal_fd_from_id(zend_long stream)
 {
 	switch (stream) {
@@ -648,6 +781,10 @@ static bool terminal_stream_is_tty(zend_long stream)
 static bool terminal_stream_supports_ansi(zend_long stream)
 {
 	const char *term;
+
+	if (terminal_no_color_is_set()) {
+		return false;
+	}
 
 	if (!terminal_stream_is_tty(stream)) {
 		return false;
@@ -851,6 +988,10 @@ static int terminal_read_byte(int fd, unsigned char *byte, int timeout_ms)
 
 		if (ready < 0) {
 			if (errno == EINTR) {
+				if (terminal_consume_resize_pending()) {
+					return TERMINAL_READ_RESIZE;
+				}
+
 				continue;
 			}
 
@@ -864,6 +1005,10 @@ static int terminal_read_byte(int fd, unsigned char *byte, int timeout_ms)
 
 		if (bytes_read < 0) {
 			if (errno == EINTR) {
+				if (terminal_consume_resize_pending()) {
+					return TERMINAL_READ_RESIZE;
+				}
+
 				continue;
 			}
 
@@ -1060,29 +1205,75 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 	struct termios mode;
 	struct termios raw_mode;
 	unsigned char key;
+	int read_result;
 	zend_string *result = NULL;
+#ifdef SIGWINCH
+	struct sigaction old_resize_action;
+#endif
+	bool resize_handler_installed;
 
 	if (fd < 0 || isatty(fd) != 1 || tcgetattr(fd, &mode) != 0) {
 		return NULL;
 	}
 
+	resize_handler_installed = terminal_install_resize_handler(
+#ifdef SIGWINCH
+		&old_resize_action
+#else
+		NULL
+#endif
+	);
+
 	raw_mode = mode;
 	terminal_make_raw_mode(&raw_mode);
 
 	if (tcsetattr(fd, TCSANOW, &raw_mode) != 0) {
+		if (resize_handler_installed) {
+			terminal_restore_resize_handler(
+#ifdef SIGWINCH
+				&old_resize_action
+#else
+				NULL
+#endif
+			);
+		}
+
 		return NULL;
 	}
 
-	if (terminal_read_byte(fd, &key, timeout_ms) == 1) {
+	read_result = terminal_read_byte(fd, &key, timeout_ms);
+	if (read_result == TERMINAL_READ_RESIZE) {
+		result = terminal_key_string("resize");
+	} else if (read_result == 1) {
 		result = terminal_key_from_byte(fd, key, sequence_timeout_ms);
 	}
 
 	if (tcsetattr(fd, TCSANOW, &mode) != 0) {
+		if (resize_handler_installed) {
+			terminal_restore_resize_handler(
+#ifdef SIGWINCH
+				&old_resize_action
+#else
+				NULL
+#endif
+			);
+		}
+
 		if (result != NULL) {
 			zend_string_release(result);
 		}
 
 		return NULL;
+	}
+
+	if (resize_handler_installed) {
+		terminal_restore_resize_handler(
+#ifdef SIGWINCH
+			&old_resize_action
+#else
+			NULL
+#endif
+		);
 	}
 
 	return result;
@@ -1195,6 +1386,13 @@ static void terminal_validate_input_stream_or_throw(zend_long stream, uint32_t a
 	if (stream != TERMINAL_STREAM_STDIN) {
 		zend_argument_value_error(arg_num, "must be Terminal\\Stream::Stdin");
 	}
+}
+
+ZEND_METHOD(Terminal_ModeToken, __construct)
+{
+	(void) return_value;
+
+	ZEND_PARSE_PARAMETERS_NONE();
 }
 
 ZEND_METHOD(Terminal_Terminal, getBackend)
@@ -1343,31 +1541,26 @@ ZEND_METHOD(Terminal_Terminal, enableRawMode)
 		RETURN_FALSE;
 	}
 
-	RETURN_STRINGL((const char *) &saved, sizeof(saved));
+	terminal_create_mode_token(return_value, &saved);
 }
 
 ZEND_METHOD(Terminal_Terminal, restoreMode)
 {
-	zend_string *mode;
-	terminal_saved_mode saved;
+	zval *mode_token;
+	terminal_mode_token_object *mode;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_STR(mode)
+		Z_PARAM_OBJECT_OF_CLASS(mode_token, terminal_mode_token_ce)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (ZSTR_LEN(mode) != sizeof(saved)) {
+	mode = Z_TERMINAL_MODE_TOKEN_P(mode_token);
+
+	if (!mode->valid || memcmp(mode->saved.magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN) != 0) {
 		zend_argument_value_error(1, "must be a terminal mode token returned by Terminal\\Terminal::enableRawMode()");
 		RETURN_THROWS();
 	}
 
-	memcpy(&saved, ZSTR_VAL(mode), sizeof(saved));
-
-	if (memcmp(saved.magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN) != 0) {
-		zend_argument_value_error(1, "must be a terminal mode token returned by Terminal\\Terminal::enableRawMode()");
-		RETURN_THROWS();
-	}
-
-	RETURN_BOOL(terminal_restore_stream_mode(&saved));
+	RETURN_BOOL(terminal_restore_stream_mode(&mode->saved));
 }
 
 ZEND_METHOD(Terminal_Terminal, readKey)
@@ -1445,6 +1638,15 @@ PHP_MINIT_FUNCTION(terminal)
 	terminal_backend_ce = register_class_Terminal_Backend();
 	terminal_stream_ce = register_class_Terminal_Stream();
 	terminal_key_ce = register_class_Terminal_Key();
+	terminal_mode_token_ce = register_class_Terminal_ModeToken();
+	terminal_mode_token_ce->create_object = terminal_mode_token_create_object;
+	terminal_mode_token_ce->ce_flags |= ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE;
+
+	memcpy(&terminal_mode_token_handlers, zend_get_std_object_handlers(), sizeof(terminal_mode_token_handlers));
+	terminal_mode_token_handlers.offset = offsetof(terminal_mode_token_object, std);
+	terminal_mode_token_handlers.free_obj = terminal_mode_token_free_obj;
+	terminal_mode_token_handlers.clone_obj = NULL;
+
 	register_class_Terminal_Terminal();
 
 	return SUCCESS;

@@ -20,8 +20,8 @@ The core-oriented API is namespaced and uses enums for values with a fixed set o
 - `Terminal\Terminal::enableAnsi(Terminal\Stream $stream = Terminal\Stream::Stdout): bool`
 - `Terminal\Terminal::getSize(Terminal\Stream $stream = Terminal\Stream::Stdout): array{columns:int, rows:int}|false`
 - `Terminal\Terminal::write(string $data, Terminal\Stream $stream = Terminal\Stream::Stdout): int|false`
-- `Terminal\Terminal::enableRawMode(Terminal\Stream $stream = Terminal\Stream::Stdin): string|false`
-- `Terminal\Terminal::restoreMode(string $mode): bool`
+- `Terminal\Terminal::enableRawMode(Terminal\Stream $stream = Terminal\Stream::Stdin): Terminal\ModeToken|false`
+- `Terminal\Terminal::restoreMode(Terminal\ModeToken $mode): bool`
 - `Terminal\Terminal::readKey(?float $timeout = null, ?float $sequenceTimeout = null): Terminal\Key|string|false`
 - `Terminal\Terminal::readSecret(?float $timeout = null): string|false`
 
@@ -29,14 +29,16 @@ Enums:
 
 - `Terminal\Backend`: `Posix`, `Windows`
 - `Terminal\Stream`: `Stdin`, `Stdout`, `Stderr`
-- `Terminal\Key`: `Up`, `Down`, `Left`, `Right`, `Enter`, `Backspace`, `Escape`, `Tab`, `Home`, `End`, `Delete`, `PageUp`, `PageDown`
+- `Terminal\Key`: `Up`, `Down`, `Left`, `Right`, `Enter`, `Backspace`, `Escape`, `Tab`, `Home`, `End`, `Delete`, `PageUp`, `PageDown`, `Resize`
 
-`Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals.
+`Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals. `NO_COLOR` disables ANSI support checks.
 `Terminal\Terminal::write()` accepts `Terminal\Stream::Stdout` and `Terminal\Stream::Stderr`.
-`Terminal\Terminal::enableRawMode()` currently accepts `Terminal\Stream::Stdin` and returns an opaque mode token that should be passed back to `Terminal\Terminal::restoreMode()`.
+`Terminal\Terminal::enableRawMode()` currently accepts `Terminal\Stream::Stdin` and returns an opaque `Terminal\ModeToken` that should be passed back to `Terminal\Terminal::restoreMode()`.
 `Terminal\Terminal::enableRawMode()` leaves terminal output processing intact, so normal prompt output such as `"\n"` keeps working while input is read one key at a time.
+On POSIX, raw-mode switches use `TCSANOW` so mode changes are immediate; callers that type ahead should not assume pending input was drained first.
 `Terminal\Terminal::readKey()` temporarily prepares standard input for key reads, restores the previous mode before returning, returns special keys as `Terminal\Key` cases, returns printable input as strings including UTF-8 input, and returns `false` when no key is available before the timeout.
 On POSIX, `$sequenceTimeout` controls how long `readKey()` waits for bytes that complete an escape or UTF-8 sequence after the first byte.
+On POSIX, `SIGWINCH` during `readKey()` returns `Terminal\Key::Resize`.
 Printable Unicode input is returned as the next encoded code point from the terminal, not as a full grapheme cluster.
 `Terminal\Terminal::readSecret()` reads a hidden line from standard input, restores the previous mode before returning, handles backspace and UTF-8 input, and returns `false` on timeout or abort.
 
@@ -46,6 +48,7 @@ Example:
 
 ```php
 use Terminal\Key;
+use Terminal\ModeToken;
 use Terminal\Stream;
 use Terminal\Terminal;
 
@@ -61,7 +64,7 @@ try {
         Terminal::write("typed {$key}\n");
     }
 } finally {
-    if (is_string($mode)) {
+    if ($mode instanceof ModeToken) {
         Terminal::restoreMode($mode);
     }
 }
@@ -341,6 +344,7 @@ if (!extension_loaded('terminal')) {
 }
 
 use Terminal\Terminal;
+use Terminal\ModeToken;
 
 var_dump(Terminal::getBackend());
 var_dump(Terminal::isTty());
@@ -349,7 +353,7 @@ var_dump(Terminal::getSize());
 Terminal::write("hello from terminal\n");
 
 $mode = Terminal::enableRawMode();
-if (is_string($mode)) {
+if ($mode instanceof ModeToken) {
     try {
         $key = Terminal::readKey(0.5);
     } finally {

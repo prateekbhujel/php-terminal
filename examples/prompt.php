@@ -1,6 +1,7 @@
 <?php
 
 use Terminal\Key;
+use Terminal\ModeToken;
 use Terminal\Stream;
 use Terminal\Terminal;
 
@@ -24,7 +25,7 @@ $selected = 0;
 $useAnsi = Terminal::supportsAnsi();
 $mode = Terminal::enableRawMode();
 
-if (!is_string($mode)) {
+if (!$mode instanceof ModeToken) {
 	fwrite(STDERR, "could not enable raw mode\n");
 	exit(1);
 }
@@ -53,6 +54,11 @@ try {
 
 	while (true) {
 		$key = Terminal::readKey();
+
+		if ($key === Key::Resize) {
+			render_prompt($options, $selected, $useAnsi);
+			continue;
+		}
 
 		if ($key === Key::Up || $key === 'k') {
 			$selected = ($selected + count($options) - 1) % count($options);

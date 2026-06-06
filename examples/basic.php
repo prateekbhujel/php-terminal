@@ -1,5 +1,6 @@
 <?php
 
+use Terminal\ModeToken;
 use Terminal\Terminal;
 
 if (!extension_loaded('terminal')) {
@@ -15,8 +16,8 @@ var_dump(Terminal::getSize());
 var_dump(Terminal::write("hello from terminal\n"));
 
 $mode = Terminal::enableRawMode();
-var_dump($mode === false || is_string($mode));
-if (is_string($mode)) {
+var_dump($mode === false || $mode instanceof ModeToken);
+if ($mode instanceof ModeToken) {
 	try {
 		var_dump(Terminal::readKey(0.5));
 	} finally {
