@@ -297,6 +297,7 @@ static bool terminal_stream_supports_ansi(zend_long stream)
 {
 	HANDLE handle = terminal_handle_from_id(stream);
 	DWORD mode;
+	DWORD ansi_mode;
 
 	if (terminal_no_color_is_set()) {
 		return false;
@@ -310,7 +311,16 @@ static bool terminal_stream_supports_ansi(zend_long stream)
 		return false;
 	}
 
-	return (mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
+	if ((mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0) {
+		return true;
+	}
+
+	ansi_mode = mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+	if (!SetConsoleMode(handle, ansi_mode)) {
+		return false;
+	}
+
+	return SetConsoleMode(handle, mode);
 }
 
 static bool terminal_enable_stream_ansi(zend_long stream)
