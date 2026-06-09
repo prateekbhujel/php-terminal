@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Improved Windows ANSI detection so `Terminal\Terminal::supportsAnsi()` probes VT support without leaving ANSI mode enabled.
+
 ## 0.4.1 - 2026-06-06
 
 - Added Windows resize-event support: `ReadConsoleInputW()` `WINDOW_BUFFER_SIZE_EVENT` now returns `Terminal\Key::Resize`.

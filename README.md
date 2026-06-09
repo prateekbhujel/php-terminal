@@ -50,6 +50,7 @@ Enums:
 - `Terminal\Stream`: `Stdin`, `Stdout`, `Stderr`
 - `Terminal\Key`: `Up`, `Down`, `Left`, `Right`, `Enter`, `Backspace`, `Escape`, `Tab`, `Home`, `End`, `Delete`, `PageUp`, `PageDown`, `Resize`
 
+`Terminal\Terminal::supportsAnsi()` reports whether ANSI output is available for a stream. On Windows, it probes VT support without leaving the stream mode changed.
 `Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals. A non-empty `NO_COLOR` disables ANSI support checks; `COLORTERM=truecolor`, `COLORTERM=24bit`, and `TERM_PROGRAM` are treated as positive terminal capability signals on POSIX TTYs.
 `Terminal\Terminal::write()` accepts `Terminal\Stream::Stdout` and `Terminal\Stream::Stderr`.
 `Terminal\Terminal::enableRawMode()` currently accepts `Terminal\Stream::Stdin` and returns an opaque `Terminal\ModeToken` that should be passed back to `Terminal\Terminal::restoreMode()`.
