@@ -1106,18 +1106,39 @@ static zend_string *terminal_key_from_csi_sequence(const unsigned char *sequence
 
 	switch (final) {
 		case 'A':
-			return terminal_key_string("up");
+			if (sequence_len == 1) {
+				return terminal_key_string("up");
+			}
+			break;
 		case 'B':
-			return terminal_key_string("down");
+			if (sequence_len == 1) {
+				return terminal_key_string("down");
+			}
+			break;
 		case 'C':
-			return terminal_key_string("right");
+			if (sequence_len == 1) {
+				return terminal_key_string("right");
+			}
+			break;
 		case 'D':
-			return terminal_key_string("left");
+			if (sequence_len == 1) {
+				return terminal_key_string("left");
+			}
+			break;
 		case 'H':
-			return terminal_key_string("home");
+			if (sequence_len == 1) {
+				return terminal_key_string("home");
+			}
+			break;
 		case 'F':
-			return terminal_key_string("end");
+			if (sequence_len == 1) {
+				return terminal_key_string("end");
+			}
+			break;
 		case '~':
+			if (sequence_len != 2) {
+				break;
+			}
 			switch (sequence[0]) {
 				case '1':
 				case '7':

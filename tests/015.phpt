@@ -1,5 +1,5 @@
 --TEST--
-Terminal\Terminal::readKey handles malformed escape sequences
+Terminal\Terminal::readKey handles malformed and unnormalized escape sequences
 --EXTENSIONS--
 terminal
 --SKIPIF--
@@ -103,6 +103,9 @@ $cases = [
     'incomplete-csi' => read_key_from_child("\033["),
     'overflow-csi' => read_key_from_child("\033[12345678"),
     'resize-during-csi' => read_key_from_child("\033[", true),
+    'f5' => read_key_from_child("\033[15~"),
+    'modified-up' => read_key_from_child("\033[1;5A"),
+    'modified-pageup' => read_key_from_child("\033[5;2~"),
 ];
 
 foreach ($cases as $name => $output) {
@@ -113,3 +116,6 @@ foreach ($cases as $name => $output) {
 incomplete-csi
 overflow-csi
 resize-during-csi
+f5
+modified-up
+modified-pageup
