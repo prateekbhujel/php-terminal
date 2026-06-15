@@ -23,7 +23,7 @@ putenv('LINES');
 ?>
 --EXPECT--
 array(2) {
-  ["columns"]=>
+  ["cols"]=>
   int(132)
   ["rows"]=>
   int(43)

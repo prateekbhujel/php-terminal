@@ -12,7 +12,7 @@ $size = Terminal::getSize();
 var_dump(is_bool(Terminal::isTty()));
 var_dump(is_bool(Terminal::supportsAnsi()));
 var_dump(is_bool(Terminal::enableAnsi()));
-var_dump($size === false || (is_array($size) && isset($size['columns'], $size['rows']) && is_int($size['columns']) && is_int($size['rows'])));
+var_dump($size === false || (is_array($size) && isset($size['cols'], $size['rows']) && is_int($size['cols']) && is_int($size['rows'])));
 var_dump(Terminal::write("terminal-write\n") >= 15);
 
 try {

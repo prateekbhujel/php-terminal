@@ -111,6 +111,23 @@ $cases = [
     'delete' => ["\033[3~", 'Delete:delete'],
     'pageup' => ["\033[5~", 'PageUp:pageup'],
     'pagedown' => ["\033[6~", 'PageDown:pagedown'],
+    'ss3-f1' => ["\033OP", 'F1:f1'],
+    'ss3-f2' => ["\033OQ", 'F2:f2'],
+    'ss3-f3' => ["\033OR", 'F3:f3'],
+    'ss3-f4' => ["\033OS", 'F4:f4'],
+    'csi-f1' => ["\033[11~", 'F1:f1'],
+    'csi-f2' => ["\033[12~", 'F2:f2'],
+    'csi-f3' => ["\033[13~", 'F3:f3'],
+    'csi-f4' => ["\033[14~", 'F4:f4'],
+    'csi-f5' => ["\033[15~", 'F5:f5'],
+    'csi-f6' => ["\033[17~", 'F6:f6'],
+    'csi-f7' => ["\033[18~", 'F7:f7'],
+    'csi-f8' => ["\033[19~", 'F8:f8'],
+    'csi-f9' => ["\033[20~", 'F9:f9'],
+    'csi-f10' => ["\033[21~", 'F10:f10'],
+    'csi-f11' => ["\033[23~", 'F11:f11'],
+    'csi-f12' => ["\033[24~", 'F12:f12'],
+    'shift-f12' => ["\033[24;2~", 'F12:f12'],
 ];
 
 foreach ($cases as $name => [$input, $expected]) {
@@ -139,5 +156,22 @@ end
 delete
 pageup
 pagedown
+ss3-f1
+ss3-f2
+ss3-f3
+ss3-f4
+csi-f1
+csi-f2
+csi-f3
+csi-f4
+csi-f5
+csi-f6
+csi-f7
+csi-f8
+csi-f9
+csi-f10
+csi-f11
+csi-f12
+shift-f12
 timeout
 delayed-up

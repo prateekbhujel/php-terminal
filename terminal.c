@@ -161,16 +161,52 @@ static zend_object *terminal_key_enum_from_string(zend_string *key)
 	if (zend_string_equals_literal(key, "resize")) {
 		return zend_enum_get_case_cstr(terminal_key_ce, "Resize");
 	}
+	if (zend_string_equals_literal(key, "f1")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "F1");
+	}
+	if (zend_string_equals_literal(key, "f2")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "F2");
+	}
+	if (zend_string_equals_literal(key, "f3")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "F3");
+	}
+	if (zend_string_equals_literal(key, "f4")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "F4");
+	}
+	if (zend_string_equals_literal(key, "f5")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "F5");
+	}
+	if (zend_string_equals_literal(key, "f6")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "F6");
+	}
+	if (zend_string_equals_literal(key, "f7")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "F7");
+	}
+	if (zend_string_equals_literal(key, "f8")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "F8");
+	}
+	if (zend_string_equals_literal(key, "f9")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "F9");
+	}
+	if (zend_string_equals_literal(key, "f10")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "F10");
+	}
+	if (zend_string_equals_literal(key, "f11")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "F11");
+	}
+	if (zend_string_equals_literal(key, "f12")) {
+		return zend_enum_get_case_cstr(terminal_key_ce, "F12");
+	}
 
 	return NULL;
 }
 
-static void terminal_buffer_remove_last_utf8_char(smart_str *buffer)
+static bool terminal_buffer_remove_last_utf8_char(smart_str *buffer)
 {
 	size_t len;
 
 	if (buffer->s == NULL || ZSTR_LEN(buffer->s) == 0) {
-		return;
+		return false;
 	}
 
 	len = ZSTR_LEN(buffer->s);
@@ -181,6 +217,8 @@ static void terminal_buffer_remove_last_utf8_char(smart_str *buffer)
 
 	ZSTR_VAL(buffer->s)[len] = '\0';
 	ZSTR_LEN(buffer->s) = len;
+
+	return true;
 }
 
 static bool terminal_parse_positive_env_long(zend_string *value, zend_long *result)
@@ -235,6 +273,7 @@ static bool terminal_size_from_environment(zend_long *columns, zend_long *rows)
 	return result;
 }
 
+#ifdef PHP_WIN32
 static bool terminal_env_is_non_empty(const char *name, size_t name_len)
 {
 	zend_string *value = php_getenv(name, name_len);
@@ -250,25 +289,13 @@ static bool terminal_env_is_non_empty(const char *name, size_t name_len)
 	return result;
 }
 
-static bool terminal_env_equals_literal_ci(const char *name, size_t name_len, const char *literal, size_t literal_len)
-{
-	zend_string *value = php_getenv(name, name_len);
-	bool result = false;
-
-	if (value != NULL) {
-		result = zend_binary_strcasecmp(ZSTR_VAL(value), ZSTR_LEN(value), literal, literal_len) == 0;
-		zend_string_release(value);
-	}
-
-	return result;
-}
-
 static bool terminal_no_color_is_set(void)
 {
 	return terminal_env_is_non_empty("NO_COLOR", sizeof("NO_COLOR") - 1);
 }
 
-#ifdef PHP_WIN32
+static int terminal_win_stdin_is_raw = 0;
+
 static HANDLE terminal_handle_from_id(zend_long stream)
 {
 	switch (stream) {
@@ -395,9 +422,13 @@ static bool terminal_stream_write(zend_long stream, const char *buffer, size_t b
 	return true;
 }
 
-static DWORD terminal_make_raw_mode(DWORD mode)
+static DWORD terminal_make_raw_mode(DWORD mode, bool mark_stdin_raw)
 {
 	/* ReadConsoleInputW returns key events directly, so VT input is not required here. */
+	if (mark_stdin_raw) {
+		terminal_win_stdin_is_raw = 1;
+	}
+
 	return mode & ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
 }
 
@@ -411,9 +442,12 @@ static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mod
 		return false;
 	}
 
-	raw_mode = terminal_make_raw_mode(mode);
+	raw_mode = terminal_make_raw_mode(mode, stream == TERMINAL_STREAM_STDIN);
 
 	if (!SetConsoleMode(handle, raw_mode)) {
+		if (stream == TERMINAL_STREAM_STDIN) {
+			terminal_win_stdin_is_raw = 0;
+		}
 		return false;
 	}
 
@@ -428,10 +462,15 @@ static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mod
 static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
 {
 	HANDLE handle = terminal_handle_from_id(saved->stream);
-
-	return handle != INVALID_HANDLE_VALUE
+	bool restored = handle != INVALID_HANDLE_VALUE
 		&& handle != NULL
 		&& SetConsoleMode(handle, saved->mode);
+
+	if (restored && saved->stream == TERMINAL_STREAM_STDIN) {
+		terminal_win_stdin_is_raw = 0;
+	}
+
+	return restored;
 }
 
 static DWORD terminal_timeout_to_wait_ms(double timeout, bool timeout_is_null)
@@ -505,6 +544,30 @@ static zend_string *terminal_key_from_virtual_key(WORD key)
 			return terminal_key_string("pageup");
 		case VK_NEXT:
 			return terminal_key_string("pagedown");
+		case VK_F1:
+			return terminal_key_string("f1");
+		case VK_F2:
+			return terminal_key_string("f2");
+		case VK_F3:
+			return terminal_key_string("f3");
+		case VK_F4:
+			return terminal_key_string("f4");
+		case VK_F5:
+			return terminal_key_string("f5");
+		case VK_F6:
+			return terminal_key_string("f6");
+		case VK_F7:
+			return terminal_key_string("f7");
+		case VK_F8:
+			return terminal_key_string("f8");
+		case VK_F9:
+			return terminal_key_string("f9");
+		case VK_F10:
+			return terminal_key_string("f10");
+		case VK_F11:
+			return terminal_key_string("f11");
+		case VK_F12:
+			return terminal_key_string("f12");
 	}
 
 	return NULL;
@@ -574,7 +637,7 @@ static zend_string *terminal_key_from_input_record(const KEY_EVENT_RECORD *key)
 static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
 {
 	HANDLE handle = terminal_handle_from_id(TERMINAL_STREAM_STDIN);
-	DWORD mode;
+	DWORD mode = 0;
 	DWORD raw_mode;
 	DWORD wait_ms = terminal_timeout_to_wait_ms(timeout, timeout_is_null);
 	ULONGLONG deadline_ms = wait_ms == INFINITE ? 0 : GetTickCount64() + wait_ms;
@@ -584,15 +647,26 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 	(void) sequence_timeout;
 	(void) sequence_timeout_is_null;
 
-	if (handle == INVALID_HANDLE_VALUE || handle == NULL || !GetConsoleMode(handle, &mode)) {
+	if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
 		return NULL;
 	}
 
-	raw_mode = terminal_make_raw_mode(mode);
-	if (raw_mode != mode && !SetConsoleMode(handle, raw_mode)) {
-		return NULL;
+	/*
+	 * Interactive prompt loops commonly call rawMode() once and readKey()
+	 * many times. When stdin is already raw, read directly so one key read
+	 * cannot restore the console to cooked mode mid-session.
+	 */
+	if (!terminal_win_stdin_is_raw) {
+		if (!GetConsoleMode(handle, &mode)) {
+			return NULL;
+		}
+
+		raw_mode = terminal_make_raw_mode(mode, false);
+		if (raw_mode != mode && !SetConsoleMode(handle, raw_mode)) {
+			return NULL;
+		}
+		mode_changed = raw_mode != mode;
 	}
-	mode_changed = raw_mode != mode;
 
 	for (;;) {
 		INPUT_RECORD record;
@@ -644,13 +718,11 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 	return result;
 }
 
-static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_null)
+static zend_string *terminal_read_stdin_secret(void)
 {
 	HANDLE handle = terminal_handle_from_id(TERMINAL_STREAM_STDIN);
 	DWORD mode;
 	DWORD raw_mode;
-	DWORD wait_ms = terminal_timeout_to_wait_ms(timeout, timeout_is_null);
-	ULONGLONG deadline_ms = wait_ms == INFINITE ? 0 : GetTickCount64() + wait_ms;
 	smart_str secret = {0};
 	bool success = false;
 	bool failed = false;
@@ -660,7 +732,7 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 		return NULL;
 	}
 
-	raw_mode = terminal_make_raw_mode(mode);
+	raw_mode = terminal_make_raw_mode(mode, false);
 	if (raw_mode != mode && !SetConsoleMode(handle, raw_mode)) {
 		return NULL;
 	}
@@ -670,11 +742,7 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 		INPUT_RECORD record;
 		KEY_EVENT_RECORD *key;
 		DWORD records_read;
-		DWORD wait_result = WaitForSingleObject(handle, wait_ms);
-
-		if (wait_result == WAIT_TIMEOUT) {
-			break;
-		}
+		DWORD wait_result = WaitForSingleObject(handle, INFINITE);
 
 		if (wait_result != WAIT_OBJECT_0) {
 			failed = true;
@@ -687,7 +755,7 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 		}
 
 		if (record.EventType != KEY_EVENT || !record.Event.KeyEvent.bKeyDown) {
-			goto update_timeout;
+			continue;
 		}
 
 		key = &record.Event.KeyEvent;
@@ -698,24 +766,29 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 		}
 
 		if (key->wVirtualKeyCode == VK_BACK) {
-			terminal_buffer_remove_last_utf8_char(&secret);
-			goto update_timeout;
+			if (terminal_buffer_remove_last_utf8_char(&secret)) {
+				zend_long written;
+
+				terminal_stream_write(TERMINAL_STREAM_STDOUT, "\b \b", sizeof("\b \b") - 1, &written);
+			}
+			continue;
 		}
 
 		if (key->wVirtualKeyCode == VK_ESCAPE || key->uChar.UnicodeChar == 0x03 || key->uChar.UnicodeChar == 0x04) {
 			break;
 		}
 
-		if (!terminal_secret_append_wchar(&secret, key->uChar.UnicodeChar)) {
-			failed = true;
-			break;
-		}
+		{
+			size_t before_len = secret.s == NULL ? 0 : ZSTR_LEN(secret.s);
+			zend_long written;
 
-update_timeout:
-		if (!timeout_is_null) {
-			wait_ms = terminal_remaining_wait_ms(deadline_ms);
-			if (wait_ms == 0) {
+			if (!terminal_secret_append_wchar(&secret, key->uChar.UnicodeChar)) {
+				failed = true;
 				break;
+			}
+
+			if ((secret.s == NULL ? 0 : ZSTR_LEN(secret.s)) > before_len) {
+				terminal_stream_write(TERMINAL_STREAM_STDOUT, "*", 1, &written);
 			}
 		}
 	}
@@ -818,32 +891,75 @@ static bool terminal_stream_is_tty(zend_long stream)
 	return fd >= 0 && isatty(fd) == 1;
 }
 
+static const char *terminal_getenv_nonempty(const char *name)
+{
+	const char *value = getenv(name);
+
+	return value != NULL && value[0] != '\0' ? value : NULL;
+}
+
+/*
+ * ANSI capability detection order on Unix:
+ * 1. NO_COLOR set in the environment disables ANSI output.
+ *    Spec: https://no-color.org
+ * 2. A non-TTY stream without COLORTERM is not ANSI capable.
+ * 3. COLORTERM=truecolor or COLORTERM=24bit is ANSI capable.
+ * 4. TERM unset or TERM=dumb is not ANSI capable.
+ * 5. Known TERM_PROGRAM values are ANSI capable.
+ * 6. TERM containing 256color or color is ANSI capable.
+ * 7. Known color-capable TERM values are ANSI capable.
+ * 8. Fall back to isatty(fd).
+ */
 static bool terminal_stream_supports_ansi(zend_long stream)
 {
-	zend_string *term;
-	bool has_term;
+	int fd = terminal_fd_from_id(stream);
+	bool is_tty = fd >= 0 && isatty(fd) == 1;
+	const char *colorterm;
+	const char *term;
+	const char *term_program;
 
-	if (terminal_no_color_is_set()) {
+	if (getenv("NO_COLOR") != NULL) {
 		return false;
 	}
 
-	if (!terminal_stream_is_tty(stream)) {
+	colorterm = terminal_getenv_nonempty("COLORTERM");
+	if (!is_tty && colorterm == NULL) {
 		return false;
 	}
 
-	if (terminal_env_equals_literal_ci("COLORTERM", sizeof("COLORTERM") - 1, "truecolor", sizeof("truecolor") - 1)
-		|| terminal_env_equals_literal_ci("COLORTERM", sizeof("COLORTERM") - 1, "24bit", sizeof("24bit") - 1)) {
+	if (colorterm != NULL && (strcmp(colorterm, "truecolor") == 0 || strcmp(colorterm, "24bit") == 0)) {
 		return true;
 	}
 
-	term = php_getenv("TERM", sizeof("TERM") - 1);
-	has_term = term != NULL && ZSTR_LEN(term) > 0
-		&& zend_binary_strcasecmp(ZSTR_VAL(term), ZSTR_LEN(term), "dumb", sizeof("dumb") - 1) != 0;
-	if (term != NULL) {
-		zend_string_release(term);
+	term = terminal_getenv_nonempty("TERM");
+	if (term == NULL || strcmp(term, "dumb") == 0) {
+		return false;
 	}
 
-	return has_term || terminal_env_is_non_empty("TERM_PROGRAM", sizeof("TERM_PROGRAM") - 1);
+	term_program = terminal_getenv_nonempty("TERM_PROGRAM");
+	if (term_program != NULL
+		&& (strcmp(term_program, "iTerm.app") == 0
+			|| strcmp(term_program, "Hyper") == 0
+			|| strcmp(term_program, "WezTerm") == 0
+			|| strcmp(term_program, "vscode") == 0
+			|| strcmp(term_program, "Tabby") == 0)) {
+		return true;
+	}
+
+	if (strstr(term, "256color") != NULL || strstr(term, "color") != NULL) {
+		return true;
+	}
+
+	if (strcmp(term, "xterm") == 0
+		|| strcmp(term, "rxvt") == 0
+		|| strcmp(term, "screen") == 0
+		|| strcmp(term, "tmux") == 0
+		|| strcmp(term, "alacritty") == 0
+		|| strcmp(term, "kitty") == 0) {
+		return true;
+	}
+
+	return is_tty;
 }
 
 static bool terminal_enable_stream_ansi(zend_long stream)
@@ -1136,23 +1252,86 @@ static zend_string *terminal_key_from_csi_sequence(const unsigned char *sequence
 			}
 			break;
 		case '~':
-			if (sequence_len != 2) {
+		{
+			size_t i = 0;
+			unsigned int number = 0;
+
+			while (i < sequence_len - 1 && sequence[i] >= '0' && sequence[i] <= '9') {
+				number = (number * 10) + (unsigned int) (sequence[i] - '0');
+				i++;
+			}
+
+			if (i == 0 || (i < sequence_len - 1 && sequence[i] != ';')) {
 				break;
 			}
-			switch (sequence[0]) {
-				case '1':
-				case '7':
+
+			switch (number) {
+				case 1:
+				case 7:
 					return terminal_key_string("home");
-				case '3':
+				case 3:
 					return terminal_key_string("delete");
-				case '4':
-				case '8':
+				case 4:
+				case 8:
 					return terminal_key_string("end");
-				case '5':
+				case 5:
 					return terminal_key_string("pageup");
-				case '6':
+				case 6:
 					return terminal_key_string("pagedown");
+				case 11:
+					return terminal_key_string("f1");
+				case 12:
+					return terminal_key_string("f2");
+				case 13:
+					return terminal_key_string("f3");
+				case 14:
+					return terminal_key_string("f4");
+				case 15:
+					return terminal_key_string("f5");
+				case 17:
+					return terminal_key_string("f6");
+				case 18:
+					return terminal_key_string("f7");
+				case 19:
+					return terminal_key_string("f8");
+				case 20:
+					return terminal_key_string("f9");
+				case 21:
+					return terminal_key_string("f10");
+				case 23:
+					return terminal_key_string("f11");
+				case 24:
+					return terminal_key_string("f12");
 			}
+		}
+	}
+
+	return terminal_key_string("escape");
+}
+
+static zend_string *terminal_key_from_ss3_sequence(unsigned char key)
+{
+	switch (key) {
+		case 'A':
+			return terminal_key_string("up");
+		case 'B':
+			return terminal_key_string("down");
+		case 'C':
+			return terminal_key_string("right");
+		case 'D':
+			return terminal_key_string("left");
+		case 'H':
+			return terminal_key_string("home");
+		case 'F':
+			return terminal_key_string("end");
+		case 'P':
+			return terminal_key_string("f1");
+		case 'Q':
+			return terminal_key_string("f2");
+		case 'R':
+			return terminal_key_string("f3");
+		case 'S':
+			return terminal_key_string("f4");
 	}
 
 	return terminal_key_string("escape");
@@ -1165,7 +1344,7 @@ static bool terminal_is_csi_final_byte(unsigned char key)
 
 static zend_string *terminal_key_from_escape_sequence(int fd, int sequence_timeout_ms)
 {
-	unsigned char sequence[8];
+	unsigned char sequence[24];
 	size_t sequence_len = 0;
 	int result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms, false);
 
@@ -1179,7 +1358,7 @@ static zend_string *terminal_key_from_escape_sequence(int fd, int sequence_timeo
 			return terminal_key_string("escape");
 		}
 
-		return terminal_key_from_csi_sequence(sequence + 1, 1);
+		return terminal_key_from_ss3_sequence(sequence[1]);
 	}
 
 	if (sequence[0] != '[') {
@@ -1381,11 +1560,9 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 	return result;
 }
 
-static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_null)
+static zend_string *terminal_read_stdin_secret(void)
 {
 	int fd = terminal_fd_from_id(TERMINAL_STREAM_STDIN);
-	int timeout_ms = terminal_timeout_to_ms(timeout, timeout_is_null);
-	int64_t deadline_ms = timeout_ms > 0 ? terminal_current_time_ms() + timeout_ms : 0;
 	struct termios mode;
 	struct termios raw_mode;
 	smart_str secret = {0};
@@ -1406,20 +1583,9 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 
 	for (;;) {
 		unsigned char key;
-		int wait_ms = timeout_ms;
 		int result;
 
-		if (timeout_ms > 0) {
-			int64_t remaining_ms = deadline_ms - terminal_current_time_ms();
-
-			if (remaining_ms <= 0) {
-				break;
-			}
-
-			wait_ms = remaining_ms > INT_MAX ? INT_MAX : (int) remaining_ms;
-		}
-
-		result = terminal_read_byte(fd, &key, wait_ms, false);
+		result = terminal_read_byte(fd, &key, -1, false);
 		if (result != 1) {
 			break;
 		}
@@ -1431,7 +1597,11 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 				goto restore;
 			case 0x7f:
 			case '\b':
-				terminal_buffer_remove_last_utf8_char(&secret);
+				if (terminal_buffer_remove_last_utf8_char(&secret)) {
+					zend_long written;
+
+					terminal_stream_write(TERMINAL_STREAM_STDOUT, "\b \b", sizeof("\b \b") - 1, &written);
+				}
 				break;
 			case 0x03:
 			case 0x04:
@@ -1451,7 +1621,13 @@ static zend_string *terminal_read_stdin_secret(double timeout, bool timeout_is_n
 			}
 			default:
 				if (key >= 0x20) {
+					size_t before_len = secret.s == NULL ? 0 : ZSTR_LEN(secret.s);
+					zend_long written;
+
 					terminal_secret_append_utf8_sequence(fd, &secret, key);
+					if ((secret.s == NULL ? 0 : ZSTR_LEN(secret.s)) > before_len) {
+						terminal_stream_write(TERMINAL_STREAM_STDOUT, "*", 1, &written);
+					}
 				}
 				break;
 		}
@@ -1588,7 +1764,7 @@ ZEND_METHOD(Terminal_Terminal, getSize)
 	}
 
 	array_init(return_value);
-	add_assoc_long(return_value, "columns", columns);
+	add_assoc_long(return_value, "cols", columns);
 	add_assoc_long(return_value, "rows", rows);
 }
 
@@ -1708,26 +1884,31 @@ ZEND_METHOD(Terminal_Terminal, readKey)
 
 ZEND_METHOD(Terminal_Terminal, readSecret)
 {
-	double timeout = 0;
-	bool timeout_is_null = true;
+	zend_string *prompt = NULL;
 	zend_string *secret;
 
 	ZEND_PARSE_PARAMETERS_START(0, 1)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_DOUBLE_OR_NULL(timeout, timeout_is_null)
+		Z_PARAM_STR(prompt)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (!timeout_is_null && timeout < 0) {
-		zend_argument_value_error(1, "must be greater than or equal to 0");
-		RETURN_THROWS();
+	if (prompt != NULL && ZSTR_LEN(prompt) > 0) {
+		zend_long written;
+
+		if (!terminal_stream_write(TERMINAL_STREAM_STDOUT, ZSTR_VAL(prompt), ZSTR_LEN(prompt), &written)
+			|| written != (zend_long) ZSTR_LEN(prompt)) {
+			zend_throw_error(NULL, "Unable to write secret prompt");
+			RETURN_THROWS();
+		}
 	}
 
-	secret = terminal_read_stdin_secret(timeout, timeout_is_null);
+	secret = terminal_read_stdin_secret();
 	if (secret != NULL) {
 		RETURN_STR(secret);
 	}
 
-	RETURN_FALSE;
+	zend_throw_error(NULL, "Unable to read secret from terminal");
+	RETURN_THROWS();
 }
 
 PHP_MINIT_FUNCTION(terminal)

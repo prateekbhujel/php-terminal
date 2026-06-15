@@ -99,23 +99,30 @@ PHP;
     return $output;
 }
 
-$cases = [
+$escapeCases = [
     'incomplete-csi' => read_key_from_child("\033["),
     'overflow-csi' => read_key_from_child("\033[12345678"),
     'resize-during-csi' => read_key_from_child("\033[", true),
-    'f5' => read_key_from_child("\033[15~"),
     'modified-up' => read_key_from_child("\033[1;5A"),
-    'modified-pageup' => read_key_from_child("\033[5;2~"),
 ];
 
-foreach ($cases as $name => $output) {
+foreach ($escapeCases as $name => $output) {
     echo str_contains($output, 'Escape:escape') ? "$name\n" : $output;
+}
+
+$normalizedCases = [
+    'f5' => [read_key_from_child("\033[15~"), 'F5:f5'],
+    'modified-pageup' => [read_key_from_child("\033[5;2~"), 'PageUp:pageup'],
+];
+
+foreach ($normalizedCases as $name => [$output, $expected]) {
+    echo str_contains($output, $expected) ? "$name\n" : $output;
 }
 ?>
 --EXPECT--
 incomplete-csi
 overflow-csi
 resize-during-csi
-f5
 modified-up
+f5
 modified-pageup

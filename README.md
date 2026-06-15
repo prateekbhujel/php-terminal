@@ -37,21 +37,21 @@ The core-oriented API is namespaced and uses enums for values with a fixed set o
 - `Terminal\Terminal::isTty(Terminal\Stream $stream = Terminal\Stream::Stdout): bool`
 - `Terminal\Terminal::supportsAnsi(Terminal\Stream $stream = Terminal\Stream::Stdout): bool`
 - `Terminal\Terminal::enableAnsi(Terminal\Stream $stream = Terminal\Stream::Stdout): bool`
-- `Terminal\Terminal::getSize(Terminal\Stream $stream = Terminal\Stream::Stdout): array{columns:int, rows:int}|false`
+- `Terminal\Terminal::getSize(Terminal\Stream $stream = Terminal\Stream::Stdout): array{cols:int, rows:int}|false`
 - `Terminal\Terminal::write(string $data, Terminal\Stream $stream = Terminal\Stream::Stdout): int|false`
 - `Terminal\Terminal::enableRawMode(Terminal\Stream $stream = Terminal\Stream::Stdin): Terminal\ModeToken|false`
 - `Terminal\Terminal::restoreMode(Terminal\ModeToken $mode): bool`
 - `Terminal\Terminal::readKey(?float $timeout = null, ?float $sequenceTimeout = null): Terminal\Key|string|false`
-- `Terminal\Terminal::readSecret(?float $timeout = null): string|false`
+- `Terminal\Terminal::readSecret(string $prompt = ''): string`
 
 Enums:
 
 - `Terminal\Backend`: `Posix`, `Windows`
 - `Terminal\Stream`: `Stdin`, `Stdout`, `Stderr`
-- `Terminal\Key`: `Up`, `Down`, `Left`, `Right`, `Enter`, `Backspace`, `Escape`, `Tab`, `Home`, `End`, `Delete`, `PageUp`, `PageDown`, `Resize`
+- `Terminal\Key`: `Up`, `Down`, `Left`, `Right`, `Enter`, `Backspace`, `Escape`, `Tab`, `Home`, `End`, `Delete`, `PageUp`, `PageDown`, `Resize`, `F1` through `F12`
 
 `Terminal\Terminal::supportsAnsi()` reports whether ANSI output is available for a stream. On Windows, it probes VT support without leaving the stream mode changed.
-`Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals. A non-empty `NO_COLOR` disables ANSI support checks; `COLORTERM=truecolor`, `COLORTERM=24bit`, and `TERM_PROGRAM` are treated as positive terminal capability signals on POSIX TTYs.
+`Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals. On Unix, any `NO_COLOR` environment entry disables ANSI support checks, including `NO_COLOR=`. `COLORTERM=truecolor`, `COLORTERM=24bit`, known `TERM_PROGRAM` values, and color-capable `TERM` values are treated as positive terminal capability signals.
 `Terminal\Terminal::write()` accepts `Terminal\Stream::Stdout` and `Terminal\Stream::Stderr`.
 `Terminal\Terminal::enableRawMode()` currently accepts `Terminal\Stream::Stdin` and returns an opaque `Terminal\ModeToken` that should be passed back to `Terminal\Terminal::restoreMode()`.
 `Terminal\ModeToken` is process-local, non-serializable, and intentionally has no public constructor or properties.
@@ -61,17 +61,42 @@ On POSIX, raw-mode switches use `TCSANOW` so mode changes are immediate; callers
 On POSIX, `$sequenceTimeout` controls how long `readKey()` waits for bytes that complete an escape or UTF-8 sequence after the first byte. `null` uses the default 25ms sequence timeout.
 POSIX `SIGWINCH` and Windows `WINDOW_BUFFER_SIZE_EVENT` during `readKey()` return `Terminal\Key::Resize`.
 Printable Unicode input is returned as the next encoded code point from the terminal, not as a full grapheme cluster.
-`Terminal\Terminal::readSecret()` reads a hidden line from standard input, restores the previous mode before returning, handles backspace and UTF-8 input, and returns `false` on timeout or abort.
+`Terminal\Terminal::readSecret()` writes the optional prompt, reads a masked line from standard input, handles UTF-8 backspace, restores the previous mode on return or error, and returns the secret as a string.
+
+```php
+$password = Terminal::readSecret('Password: ');
+```
 
 Current key input scope:
 
 - normalized keys: arrows, enter, backspace, escape, tab, home, end, delete, page up, page down, resize
+- function keys: F1-F12 on Windows and Unix terminals that emit SS3 or CSI tilde sequences
 - printable input: returned as a string containing the next encoded code point
 - control bytes such as Ctrl+C: returned as single-byte strings by `readKey()`
-- not normalized yet: F1-F12, modifier combinations, and full grapheme clusters
+- not normalized yet: modifier combinations and full grapheme clusters
 - unknown POSIX escape sequences: fall back to `Terminal\Key::Escape`
 
 The earlier procedural API was removed while the project is still pre-1.0 so the extension can track the PHP core discussion more closely.
+
+## Migrating from 0.1.x
+
+The 0.1.x procedural API and `TERMINAL_*` constants were removed in favor of the namespaced class and enum API.
+
+| 0.1.x | 0.4.1 |
+| --- | --- |
+| `terminal_backend()` | `Terminal\Terminal::getBackend()` |
+| `terminal_is_tty(TERMINAL_STDOUT)` | `Terminal\Terminal::isTty(Terminal\Stream::Stdout)` |
+| `terminal_supports_ansi(TERMINAL_STDOUT)` | `Terminal\Terminal::supportsAnsi(Terminal\Stream::Stdout)` |
+| `terminal_enable_ansi(TERMINAL_STDOUT)` | `Terminal\Terminal::enableAnsi(Terminal\Stream::Stdout)` |
+| `terminal_get_size(TERMINAL_STDOUT)` | `Terminal\Terminal::getSize(Terminal\Stream::Stdout)` |
+| `terminal_write($data, TERMINAL_STDOUT)` | `Terminal\Terminal::write($data, Terminal\Stream::Stdout)` |
+| `terminal_enable_raw_mode(TERMINAL_STDIN)` | `Terminal\Terminal::enableRawMode(Terminal\Stream::Stdin)` |
+| `terminal_restore_mode($mode)` | `Terminal\Terminal::restoreMode($mode)` |
+| `terminal_read_key($timeout)` | `Terminal\Terminal::readKey($timeout)` |
+| `terminal_read_secret()` | `Terminal\Terminal::readSecret()` |
+| `TERMINAL_STDIN` | `Terminal\Stream::Stdin` |
+| `TERMINAL_STDOUT` | `Terminal\Stream::Stdout` |
+| `TERMINAL_STDERR` | `Terminal\Stream::Stderr` |
 
 Example:
 

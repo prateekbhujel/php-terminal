@@ -10,7 +10,7 @@
     <summary>Cross-platform terminal helpers for PHP CLI.</summary>
     <description>
         The terminal extension exposes a small cross-platform terminal capability layer for PHP CLI programs.
-        It currently provides backend detection, TTY checks, ANSI capability checks and enablement, terminal size lookup, direct writes to stdout/stderr, raw-mode save/restore helpers, key input, and hidden secret input.
+        It provides backend detection, TTY checks, ANSI capability checks and enablement, terminal size lookup, direct writes to stdout/stderr, raw-mode save/restore helpers, key input, and hidden secret input.
     </description>
     <lead>
         <name>Pratik Bhujel</name>
@@ -18,20 +18,21 @@
         <email>prateekbhujelpb@gmail.com</email>
         <active>yes</active>
     </lead>
-    <date>2026-06-06</date>
+    <date>2026-06-15</date>
     <version>
         <release>0.4.1</release>
         <api>0.4.1</api>
     </version>
     <stability>
-        <release>beta</release>
-        <api>beta</api>
+        <release>alpha</release>
+        <api>alpha</api>
     </stability>
     <license uri="https://www.php.net/license/3_01.txt">PHP License</license>
     <notes>
-        - Added Windows resize-event support: ReadConsoleInputW WINDOW_BUFFER_SIZE_EVENT now returns Terminal\Key::Resize.
-        - Documented the default 25ms POSIX sequence timeout used by Terminal\Terminal::readKey().
-        - Documented current key-input scope, including UTF-8 code point behavior, control-byte behavior, and function-key/modifier limitations.
+        - Added the namespaced OOP API with Terminal\Terminal, Terminal\Backend, Terminal\Stream, and Terminal\Key.
+        - Added opaque Terminal\ModeToken raw-mode handles.
+        - Added Terminal\Key::Resize and Unix F1-F12 key normalization.
+        - Corrected Unix Terminal\Terminal::supportsAnsi() detection order, including NO_COLOR handling.
     </notes>
     <contents>
         <dir name="/">
@@ -52,15 +53,25 @@
             </dir>
             <dir name="tests">
                 <file name="001.phpt" role="test" />
+                <file name="001_extension_loads.phpt" role="test" />
                 <file name="002.phpt" role="test" />
+                <file name="002_get_backend.phpt" role="test" />
                 <file name="003.phpt" role="test" />
+                <file name="003_is_tty_pipe.phpt" role="test" />
                 <file name="004.phpt" role="test" />
+                <file name="004_get_size_env.phpt" role="test" />
                 <file name="005.phpt" role="test" />
+                <file name="005_supports_ansi_dumb.phpt" role="test" />
                 <file name="006.phpt" role="test" />
+                <file name="006_supports_ansi_no_color.phpt" role="test" />
                 <file name="007.phpt" role="test" />
+                <file name="007_supports_ansi_colorterm.phpt" role="test" />
                 <file name="008.phpt" role="test" />
+                <file name="008_raw_mode_returns_token.phpt" role="test" />
                 <file name="009.phpt" role="test" />
+                <file name="009_restore_mode_type_error.phpt" role="test" />
                 <file name="010.phpt" role="test" />
+                <file name="010_read_key_fkeys.phpt" role="test" />
                 <file name="011.phpt" role="test" />
                 <file name="012.phpt" role="test" />
                 <file name="013.phpt" role="test" />
@@ -73,7 +84,7 @@
     <dependencies>
         <required>
             <php>
-                <min>8.2.0</min>
+                <min>8.1.0</min>
             </php>
             <pearinstaller>
                 <min>1.10.0</min>
@@ -82,4 +93,25 @@
     </dependencies>
     <providesextension>terminal</providesextension>
     <extsrcrelease />
+    <changelog>
+        <release>
+            <version>
+                <release>0.4.1</release>
+                <api>0.4.1</api>
+            </version>
+            <stability>
+                <release>alpha</release>
+                <api>alpha</api>
+            </stability>
+            <date>2026-06-15</date>
+            <license uri="https://www.php.net/license/3_01.txt">PHP License</license>
+            <notes>
+                - Added the namespaced OOP API.
+                - Added Terminal\ModeToken.
+                - Added Terminal\Key::Resize.
+                - Added F1-F12 normalization on Unix.
+                - Corrected Terminal\Terminal::supportsAnsi() detection.
+            </notes>
+        </release>
+    </changelog>
 </package>

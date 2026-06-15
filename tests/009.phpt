@@ -31,15 +31,15 @@ proc_close($process);
 ?>
 --FILE--
 <?php
-function read_secret_from_child(string $input, float $timeout = 1.0): string
+function read_secret_from_child(string $input, string $prompt = ''): string
 {
     $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
     $code = <<<'PHP'
 echo "ready\n";
 $secret = Terminal\Terminal::readSecret(%s);
-var_dump($secret === false ? false : bin2hex($secret));
+var_dump(bin2hex($secret));
 PHP;
-    $command = escapeshellarg(PHP_BINARY) . ' -n -d extension=' . escapeshellarg($extension) . ' -r ' . escapeshellarg(sprintf($code, var_export($timeout, true)));
+    $command = escapeshellarg(PHP_BINARY) . ' -n -d extension=' . escapeshellarg($extension) . ' -r ' . escapeshellarg(sprintf($code, var_export($prompt, true)));
     $descriptors = [
         0 => ['pty'],
         1 => ['pipe', 'w'],
@@ -84,25 +84,16 @@ $cases = [
     'ascii' => ["secret\n", 'string(12) "736563726574"'],
     'backspace' => ["ab\x7fc\n", 'string(4) "6163"'],
     'utf8' => ["caf\xc3\xa9\n", 'string(10) "636166c3a9"'],
+    'prompt-mask' => ["xy\n", "Prompt: **"],
 ];
 
 foreach ($cases as $name => [$input, $expected]) {
-    $output = read_secret_from_child($input);
+    $output = read_secret_from_child($input, $name === 'prompt-mask' ? 'Prompt: ' : '');
     echo str_contains($output, $expected) ? "$name\n" : $output;
-}
-
-$timeout = read_secret_from_child('', 0.05);
-echo str_contains($timeout, 'bool(false)') ? "timeout\n" : $timeout;
-
-try {
-    Terminal\Terminal::readSecret(-1);
-} catch (ValueError $e) {
-    echo $e->getMessage(), "\n";
 }
 ?>
 --EXPECT--
 ascii
 backspace
 utf8
-timeout
-Terminal\Terminal::readSecret(): Argument #1 ($timeout) must be greater than or equal to 0
+prompt-mask
