@@ -29,7 +29,7 @@ echo "stderr tty: " . yn(Terminal::isTty(Stream::Stderr)) . "\n";
 echo "ansi before enable: " . yn($ansiBefore) . "\n";
 echo "ansi enable result: " . yn($ansiEnabled) . "\n";
 echo "ansi after enable: " . yn($ansiAfter) . "\n";
-echo "size: " . (is_array($size) ? "{$size['columns']}x{$size['rows']}" : 'unknown') . "\n";
+echo "size: " . (is_array($size) ? "{$size['cols']}x{$size['rows']}" : 'unknown') . "\n";
 
 if (!Terminal::isTty(Stream::Stdin)) {
 	echo "interactive checks: skipped, stdin is not a terminal\n";
@@ -40,6 +40,5 @@ echo "\nPress any key within 5 seconds: ";
 $key = Terminal::readKey(5);
 echo "\nkey: " . ($key === false ? 'timeout' : ($key instanceof Key ? $key->value : $key)) . "\n";
 
-echo "Secret check. Type a value and press Enter within 30 seconds: ";
-$secret = Terminal::readSecret(30);
-echo "\nsecret result: " . ($secret === false ? 'timeout/abort' : strlen($secret) . ' bytes') . "\n";
+$secret = Terminal::readSecret("Secret check. Type a value and press Enter: ");
+echo "\nsecret result: " . strlen($secret) . " bytes\n";

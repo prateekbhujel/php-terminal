@@ -35,8 +35,15 @@ function supports_ansi_with_env(array $env): string
 {
     $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
     $code = <<<'PHP'
+foreach (['TERM', 'COLORTERM', 'TERM_PROGRAM', 'NO_COLOR'] as $name) {
+    putenv($name);
+}
+foreach (%s as $name => $value) {
+    putenv($name . '=' . $value);
+}
 var_dump(Terminal\Terminal::supportsAnsi(Terminal\Stream::Stdin));
 PHP;
+    $code = sprintf($code, var_export($env, true));
     $command = escapeshellarg(PHP_BINARY) . ' -n -d extension=' . escapeshellarg($extension) . ' -r ' . escapeshellarg($code);
     $descriptors = [
         0 => ['pty'],
@@ -44,7 +51,7 @@ PHP;
         2 => ['pipe', 'w'],
     ];
 
-    $process = proc_open($command, $descriptors, $pipes, null, $env);
+    $process = proc_open($command, $descriptors, $pipes);
     if (!is_resource($process)) {
         return 'proc_open failed';
     }
@@ -75,8 +82,8 @@ echo supports_ansi_with_env(['TERM' => 'dumb']);
 --EXPECT--
 bool(true)
 bool(false)
+bool(false)
 bool(true)
 bool(true)
-bool(true)
-bool(true)
+bool(false)
 bool(false)

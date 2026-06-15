@@ -25,6 +25,5 @@ if ($mode instanceof ModeToken) {
 	}
 }
 
-Terminal::write("Secret demo. Type a value and press Enter: ");
-$secret = Terminal::readSecret(30);
-Terminal::write("\nSecret length: " . (is_string($secret) ? strlen($secret) : 0) . "\n");
+$secret = Terminal::readSecret("Secret demo. Type a value and press Enter: ");
+Terminal::write("\nSecret length: " . strlen($secret) . "\n");

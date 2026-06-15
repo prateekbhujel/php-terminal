@@ -35,6 +35,18 @@ enum Key: string
     case PageUp = 'pageup';
     case PageDown = 'pagedown';
     case Resize = 'resize';
+    case F1 = 'f1';
+    case F2 = 'f2';
+    case F3 = 'f3';
+    case F4 = 'f4';
+    case F5 = 'f5';
+    case F6 = 'f6';
+    case F7 = 'f7';
+    case F8 = 'f8';
+    case F9 = 'f9';
+    case F10 = 'f10';
+    case F11 = 'f11';
+    case F12 = 'f12';
 }
 
 final class ModeToken
@@ -62,5 +74,5 @@ final class Terminal
 
     public static function readKey(?float $timeout = null, ?float $sequenceTimeout = null): Key|string|false {}
 
-    public static function readSecret(?float $timeout = null): string|false {}
+    public static function readSecret(string $prompt = ''): string {}
 }

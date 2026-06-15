@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 5f17fd1868f7f1a4eddfdc9ac1a9e3437e3f5330 */
+ * Stub hash: bf2bf4ea30adf6cccab83fbcd5cf1e7e90861ea6 */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Terminal_ModeToken___construct, 0, 0, 0)
 ZEND_END_ARG_INFO()
@@ -37,8 +37,8 @@ ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_read
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, sequenceTimeout, IS_DOUBLE, 1, "null")
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_readSecret, 0, 0, MAY_BE_STRING|MAY_BE_FALSE)
-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, timeout, IS_DOUBLE, 1, "null")
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Terminal_Terminal_readSecret, 0, 0, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, prompt, IS_STRING, 0, "\'\'")
 ZEND_END_ARG_INFO()
 
 ZEND_METHOD(Terminal_ModeToken, __construct);
@@ -181,6 +181,66 @@ static zend_class_entry *register_class_Terminal_Key(void)
 	zend_string *enum_case_Resize_value_str = zend_string_init("resize", strlen("resize"), 1);
 	ZVAL_STR(&enum_case_Resize_value, enum_case_Resize_value_str);
 	zend_enum_add_case_cstr(class_entry, "Resize", &enum_case_Resize_value);
+
+	zval enum_case_F1_value;
+	zend_string *enum_case_F1_value_str = zend_string_init("f1", strlen("f1"), 1);
+	ZVAL_STR(&enum_case_F1_value, enum_case_F1_value_str);
+	zend_enum_add_case_cstr(class_entry, "F1", &enum_case_F1_value);
+
+	zval enum_case_F2_value;
+	zend_string *enum_case_F2_value_str = zend_string_init("f2", strlen("f2"), 1);
+	ZVAL_STR(&enum_case_F2_value, enum_case_F2_value_str);
+	zend_enum_add_case_cstr(class_entry, "F2", &enum_case_F2_value);
+
+	zval enum_case_F3_value;
+	zend_string *enum_case_F3_value_str = zend_string_init("f3", strlen("f3"), 1);
+	ZVAL_STR(&enum_case_F3_value, enum_case_F3_value_str);
+	zend_enum_add_case_cstr(class_entry, "F3", &enum_case_F3_value);
+
+	zval enum_case_F4_value;
+	zend_string *enum_case_F4_value_str = zend_string_init("f4", strlen("f4"), 1);
+	ZVAL_STR(&enum_case_F4_value, enum_case_F4_value_str);
+	zend_enum_add_case_cstr(class_entry, "F4", &enum_case_F4_value);
+
+	zval enum_case_F5_value;
+	zend_string *enum_case_F5_value_str = zend_string_init("f5", strlen("f5"), 1);
+	ZVAL_STR(&enum_case_F5_value, enum_case_F5_value_str);
+	zend_enum_add_case_cstr(class_entry, "F5", &enum_case_F5_value);
+
+	zval enum_case_F6_value;
+	zend_string *enum_case_F6_value_str = zend_string_init("f6", strlen("f6"), 1);
+	ZVAL_STR(&enum_case_F6_value, enum_case_F6_value_str);
+	zend_enum_add_case_cstr(class_entry, "F6", &enum_case_F6_value);
+
+	zval enum_case_F7_value;
+	zend_string *enum_case_F7_value_str = zend_string_init("f7", strlen("f7"), 1);
+	ZVAL_STR(&enum_case_F7_value, enum_case_F7_value_str);
+	zend_enum_add_case_cstr(class_entry, "F7", &enum_case_F7_value);
+
+	zval enum_case_F8_value;
+	zend_string *enum_case_F8_value_str = zend_string_init("f8", strlen("f8"), 1);
+	ZVAL_STR(&enum_case_F8_value, enum_case_F8_value_str);
+	zend_enum_add_case_cstr(class_entry, "F8", &enum_case_F8_value);
+
+	zval enum_case_F9_value;
+	zend_string *enum_case_F9_value_str = zend_string_init("f9", strlen("f9"), 1);
+	ZVAL_STR(&enum_case_F9_value, enum_case_F9_value_str);
+	zend_enum_add_case_cstr(class_entry, "F9", &enum_case_F9_value);
+
+	zval enum_case_F10_value;
+	zend_string *enum_case_F10_value_str = zend_string_init("f10", strlen("f10"), 1);
+	ZVAL_STR(&enum_case_F10_value, enum_case_F10_value_str);
+	zend_enum_add_case_cstr(class_entry, "F10", &enum_case_F10_value);
+
+	zval enum_case_F11_value;
+	zend_string *enum_case_F11_value_str = zend_string_init("f11", strlen("f11"), 1);
+	ZVAL_STR(&enum_case_F11_value, enum_case_F11_value_str);
+	zend_enum_add_case_cstr(class_entry, "F11", &enum_case_F11_value);
+
+	zval enum_case_F12_value;
+	zend_string *enum_case_F12_value_str = zend_string_init("f12", strlen("f12"), 1);
+	ZVAL_STR(&enum_case_F12_value, enum_case_F12_value_str);
+	zend_enum_add_case_cstr(class_entry, "F12", &enum_case_F12_value);
 
 	return class_entry;
 }
