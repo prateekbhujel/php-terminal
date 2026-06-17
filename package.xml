@@ -18,10 +18,10 @@
         <email>prateekbhujelpb@gmail.com</email>
         <active>yes</active>
     </lead>
-    <date>2026-06-15</date>
+    <date>2026-06-17</date>
     <version>
-        <release>0.4.1</release>
-        <api>0.4.1</api>
+        <release>0.5.0</release>
+        <api>0.5.0</api>
     </version>
     <stability>
         <release>alpha</release>
@@ -29,10 +29,12 @@
     </stability>
     <license uri="https://www.php.net/license/3_01.txt">PHP License</license>
     <notes>
-        - Added the namespaced OOP API with Terminal\Terminal, Terminal\Backend, Terminal\Stream, and Terminal\Key.
-        - Added opaque Terminal\ModeToken raw-mode handles.
-        - Added Terminal\Key::Resize and Unix F1-F12 key normalization.
-        - Corrected Unix Terminal\Terminal::supportsAnsi() detection order, including NO_COLOR handling.
+        - Improved Windows ANSI detection so Terminal\Terminal::supportsAnsi() probes VT support without leaving ANSI mode enabled.
+        - Corrected Unix ANSI detection order, including NO_COLOR= handling and exact terminal capability checks.
+        - Added Unix F1-F12 key normalization for SS3 and CSI tilde sequences.
+        - Added a Windows raw-mode guard so repeated readKey() calls do not restore cooked mode during a raw prompt loop.
+        - Changed Terminal\Terminal::getSize() to return cols and rows.
+        - Changed Terminal\Terminal::readSecret() to accept an optional prompt, mask input, and return a string.
     </notes>
     <contents>
         <dir name="/">
@@ -78,6 +80,8 @@
                 <file name="014.phpt" role="test" />
                 <file name="015.phpt" role="test" />
                 <file name="016.phpt" role="test" />
+                <file name="017_read_key_raw_loop.phpt" role="test" />
+                <file name="018_get_size_exact_keys.phpt" role="test" />
             </dir>
         </dir>
     </contents>
@@ -94,6 +98,26 @@
     <providesextension>terminal</providesextension>
     <extsrcrelease />
     <changelog>
+        <release>
+            <version>
+                <release>0.5.0</release>
+                <api>0.5.0</api>
+            </version>
+            <stability>
+                <release>alpha</release>
+                <api>alpha</api>
+            </stability>
+            <date>2026-06-17</date>
+            <license uri="https://www.php.net/license/3_01.txt">PHP License</license>
+            <notes>
+                - Improved Windows ANSI detection so Terminal\Terminal::supportsAnsi() probes VT support without leaving ANSI mode enabled.
+                - Corrected Unix ANSI detection order, including NO_COLOR= handling and exact terminal capability checks.
+                - Added Unix F1-F12 key normalization for SS3 and CSI tilde sequences.
+                - Added a Windows raw-mode guard so repeated readKey() calls do not restore cooked mode during a raw prompt loop.
+                - Changed Terminal\Terminal::getSize() to return cols and rows.
+                - Changed Terminal\Terminal::readSecret() to accept an optional prompt, mask input, and return a string.
+            </notes>
+        </release>
         <release>
             <version>
                 <release>0.4.1</release>
