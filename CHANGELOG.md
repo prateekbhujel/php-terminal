@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-06-17
+
 - Improved Windows ANSI detection so `Terminal\Terminal::supportsAnsi()` probes VT support without leaving ANSI mode enabled.
 - Corrected Unix ANSI detection order, including `NO_COLOR=` handling and exact terminal capability checks.
 - Added Unix F1-F12 key normalization for SS3 and CSI tilde sequences.
