@@ -224,28 +224,30 @@ static bool terminal_buffer_remove_last_utf8_char(smart_str *buffer)
 static bool terminal_parse_positive_env_long(zend_string *value, zend_long *result)
 {
 	const char *cursor;
-	long parsed;
+	zend_long parsed = 0;
 
 	if (value == NULL || ZSTR_LEN(value) == 0) {
 		return false;
 	}
 
 	for (cursor = ZSTR_VAL(value); *cursor != '\0'; cursor++) {
+		zend_long digit;
+
 		if (*cursor < '0' || *cursor > '9') {
 			return false;
 		}
-	}
 
-	errno = 0;
-	parsed = strtol(ZSTR_VAL(value), NULL, 10);
+		digit = (zend_long) (*cursor - '0');
+		if (parsed > (ZEND_LONG_MAX - digit) / 10) {
+			return false;
+		}
 
-	if (errno == ERANGE || parsed <= 0) {
-		return false;
+		parsed = (parsed * 10) + digit;
 	}
 
 	*result = (zend_long) parsed;
 
-	return true;
+	return parsed > 0;
 }
 
 static bool terminal_size_from_environment(zend_long *columns, zend_long *rows)
@@ -1828,6 +1830,7 @@ ZEND_METHOD(Terminal_Terminal, restoreMode)
 {
 	zval *mode_token;
 	terminal_mode_token_object *mode;
+	bool restored;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
 		Z_PARAM_OBJECT_OF_CLASS(mode_token, terminal_mode_token_ce)
@@ -1840,7 +1843,13 @@ ZEND_METHOD(Terminal_Terminal, restoreMode)
 		RETURN_THROWS();
 	}
 
-	RETURN_BOOL(terminal_restore_stream_mode(&mode->saved));
+	restored = terminal_restore_stream_mode(&mode->saved);
+	if (restored) {
+		memset(&mode->saved, 0, sizeof(mode->saved));
+		mode->valid = false;
+	}
+
+	RETURN_BOOL(restored);
 }
 
 ZEND_METHOD(Terminal_Terminal, readKey)
