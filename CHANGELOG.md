@@ -9,6 +9,7 @@
 - Added Unix F1-F12 key normalization for SS3 and CSI tilde sequences.
 - Added a Windows raw-mode guard so repeated `readKey()` calls do not restore cooked mode during a raw prompt loop.
 - Changed `Terminal\Terminal::getSize()` to return `cols` and `rows`.
+- Hardened `Terminal\Terminal::getSize()` environment fallback parsing for invalid and overflowing `COLUMNS` and `LINES` values.
 - Changed `Terminal\Terminal::readSecret()` to accept an optional prompt, mask input, and return a string.
 
 ## 0.4.1 - 2026-06-06

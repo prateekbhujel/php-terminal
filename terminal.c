@@ -224,28 +224,30 @@ static bool terminal_buffer_remove_last_utf8_char(smart_str *buffer)
 static bool terminal_parse_positive_env_long(zend_string *value, zend_long *result)
 {
 	const char *cursor;
-	long parsed;
+	zend_long parsed = 0;
 
 	if (value == NULL || ZSTR_LEN(value) == 0) {
 		return false;
 	}
 
 	for (cursor = ZSTR_VAL(value); *cursor != '\0'; cursor++) {
+		zend_long digit;
+
 		if (*cursor < '0' || *cursor > '9') {
 			return false;
 		}
-	}
 
-	errno = 0;
-	parsed = strtol(ZSTR_VAL(value), NULL, 10);
+		digit = (zend_long) (*cursor - '0');
+		if (parsed > (ZEND_LONG_MAX - digit) / 10) {
+			return false;
+		}
 
-	if (errno == ERANGE || parsed <= 0) {
-		return false;
+		parsed = (parsed * 10) + digit;
 	}
 
 	*result = (zend_long) parsed;
 
-	return true;
+	return parsed > 0;
 }
 
 static bool terminal_size_from_environment(zend_long *columns, zend_long *rows)
