@@ -1830,6 +1830,7 @@ ZEND_METHOD(Terminal_Terminal, restoreMode)
 {
 	zval *mode_token;
 	terminal_mode_token_object *mode;
+	bool restored;
 
 	ZEND_PARSE_PARAMETERS_START(1, 1)
 		Z_PARAM_OBJECT_OF_CLASS(mode_token, terminal_mode_token_ce)
@@ -1842,7 +1843,13 @@ ZEND_METHOD(Terminal_Terminal, restoreMode)
 		RETURN_THROWS();
 	}
 
-	RETURN_BOOL(terminal_restore_stream_mode(&mode->saved));
+	restored = terminal_restore_stream_mode(&mode->saved);
+	if (restored) {
+		memset(&mode->saved, 0, sizeof(mode->saved));
+		mode->valid = false;
+	}
+
+	RETURN_BOOL(restored);
 }
 
 ZEND_METHOD(Terminal_Terminal, readKey)

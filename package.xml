@@ -18,7 +18,7 @@
         <email>prateekbhujelpb@gmail.com</email>
         <active>yes</active>
     </lead>
-    <date>2026-06-17</date>
+    <date>2026-06-18</date>
     <version>
         <release>0.5.0</release>
         <api>0.5.0</api>
@@ -33,6 +33,7 @@
         - Corrected Unix ANSI detection order, including NO_COLOR= handling and exact terminal capability checks.
         - Added Unix F1-F12 key normalization for SS3 and CSI tilde sequences.
         - Added a Windows raw-mode guard so repeated readKey() calls do not restore cooked mode during a raw prompt loop.
+        - Hardened Terminal\ModeToken so a token cannot be reused after a successful restoreMode().
         - Changed Terminal\Terminal::getSize() to return cols and rows.
         - Hardened Terminal\Terminal::getSize() environment fallback parsing for invalid and overflowing COLUMNS and LINES values.
         - Changed Terminal\Terminal::readSecret() to accept an optional prompt, mask input, and return a string.
@@ -84,6 +85,7 @@
                 <file name="017_read_key_raw_loop.phpt" role="test" />
                 <file name="018_get_size_exact_keys.phpt" role="test" />
                 <file name="019_get_size_env_validation.phpt" role="test" />
+                <file name="020_restore_mode_single_use.phpt" role="test" />
             </dir>
         </dir>
     </contents>
@@ -109,13 +111,14 @@
                 <release>alpha</release>
                 <api>alpha</api>
             </stability>
-            <date>2026-06-17</date>
+            <date>2026-06-18</date>
             <license uri="https://www.php.net/license/3_01.txt">PHP License</license>
             <notes>
                 - Improved Windows ANSI detection so Terminal\Terminal::supportsAnsi() probes VT support without leaving ANSI mode enabled.
                 - Corrected Unix ANSI detection order, including NO_COLOR= handling and exact terminal capability checks.
                 - Added Unix F1-F12 key normalization for SS3 and CSI tilde sequences.
                 - Added a Windows raw-mode guard so repeated readKey() calls do not restore cooked mode during a raw prompt loop.
+                - Hardened Terminal\ModeToken so a token cannot be reused after a successful restoreMode().
                 - Changed Terminal\Terminal::getSize() to return cols and rows.
                 - Hardened Terminal\Terminal::getSize() environment fallback parsing for invalid and overflowing COLUMNS and LINES values.
                 - Changed Terminal\Terminal::readSecret() to accept an optional prompt, mask input, and return a string.

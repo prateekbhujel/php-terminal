@@ -8,7 +8,7 @@ Created and maintained by Pratik Bhujel.
 
 Current release: `v0.5.0`.
 
-`v0.5.0` keeps the `Terminal\Terminal` class and enum API from `v0.3.0`, and the `Terminal\ModeToken` raw-mode handles from `v0.4.0`. It hardens raw-mode loops, fixes ANSI detection edge cases, normalizes Unix F1-F12 keys, and pins exact `getSize()` keys. The older `v0.2.0` release used the first procedural `terminal_*()` API.
+`v0.5.0` keeps the `Terminal\Terminal` class and enum API from `v0.3.0`, and the `Terminal\ModeToken` raw-mode handles from `v0.4.0`. It hardens raw-mode loops, rejects stale raw-mode tokens, fixes ANSI detection edge cases, normalizes Unix F1-F12 keys, and pins exact `getSize()` keys. The older `v0.2.0` release used the first procedural `terminal_*()` API.
 
 ## Why this exists
 
@@ -54,7 +54,7 @@ Enums:
 `Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals. On Unix, any `NO_COLOR` environment entry disables ANSI support checks, including `NO_COLOR=`. `COLORTERM=truecolor`, `COLORTERM=24bit`, known `TERM_PROGRAM` values, and color-capable `TERM` values are treated as positive terminal capability signals.
 `Terminal\Terminal::write()` accepts `Terminal\Stream::Stdout` and `Terminal\Stream::Stderr`.
 `Terminal\Terminal::enableRawMode()` currently accepts `Terminal\Stream::Stdin` and returns an opaque `Terminal\ModeToken` that should be passed back to `Terminal\Terminal::restoreMode()`.
-`Terminal\ModeToken` is process-local, non-serializable, and intentionally has no public constructor or properties.
+`Terminal\ModeToken` is process-local, non-serializable, single-use after a successful restore, and intentionally has no public constructor or properties.
 `Terminal\Terminal::enableRawMode()` leaves terminal output processing intact, so normal prompt output such as `"\n"` keeps working while input is read one key at a time.
 On POSIX, raw-mode switches use `TCSANOW` so mode changes are immediate; callers that type ahead should not assume pending input was drained first.
 `Terminal\Terminal::readKey()` temporarily prepares standard input for key reads, restores the previous mode before returning, returns special keys as `Terminal\Key` cases, returns printable input as strings including UTF-8 input, and returns `false` when no key is available before the timeout. If standard input is already raw, `readKey()` preserves that state.
