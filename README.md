@@ -6,9 +6,9 @@ The first cut stays small on purpose. It exposes the pieces that are awkward to 
 
 Created and maintained by Pratik Bhujel.
 
-Current release: `v0.5.0`.
+Current release: `v0.6.0`.
 
-`v0.5.0` keeps the `Terminal\Terminal` class and enum API from `v0.3.0`, and the `Terminal\ModeToken` raw-mode handles from `v0.4.0`. It hardens raw-mode loops, rejects stale raw-mode tokens, fixes ANSI detection edge cases, normalizes Unix F1-F12 keys, and pins exact `getSize()` keys. The older `v0.2.0` release used the first procedural `terminal_*()` API.
+`v0.6.0` lets stream-aware methods use existing PHP stream resources such as `STDIN`, `STDOUT`, `STDERR`, and `php://stdout` while preserving the `Terminal\Stream` enum defaults. It also adds PIE installation metadata. The older `v0.2.0` release used the first procedural `terminal_*()` API.
 
 ## Why this exists
 
@@ -34,12 +34,12 @@ This extension stays narrower:
 The core-oriented API is namespaced and uses enums for values with a fixed set of cases:
 
 - `Terminal\Terminal::getBackend(): Terminal\Backend`
-- `Terminal\Terminal::isTty(Terminal\Stream $stream = Terminal\Stream::Stdout): bool`
-- `Terminal\Terminal::supportsAnsi(Terminal\Stream $stream = Terminal\Stream::Stdout): bool`
-- `Terminal\Terminal::enableAnsi(Terminal\Stream $stream = Terminal\Stream::Stdout): bool`
-- `Terminal\Terminal::getSize(Terminal\Stream $stream = Terminal\Stream::Stdout): array{cols:int, rows:int}|false`
-- `Terminal\Terminal::write(string $data, Terminal\Stream $stream = Terminal\Stream::Stdout): int|false`
-- `Terminal\Terminal::enableRawMode(Terminal\Stream $stream = Terminal\Stream::Stdin): Terminal\ModeToken|false`
+- `Terminal\Terminal::isTty(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
+- `Terminal\Terminal::supportsAnsi(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
+- `Terminal\Terminal::enableAnsi(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
+- `Terminal\Terminal::getSize(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): array{cols:int, rows:int}|false`
+- `Terminal\Terminal::write(string $data, Terminal\Stream|resource $stream = Terminal\Stream::Stdout): int|false`
+- `Terminal\Terminal::enableRawMode(Terminal\Stream|resource $stream = Terminal\Stream::Stdin): Terminal\ModeToken|false`
 - `Terminal\Terminal::restoreMode(Terminal\ModeToken $mode): bool`
 - `Terminal\Terminal::readKey(?float $timeout = null, ?float $sequenceTimeout = null): Terminal\Key|string|false`
 - `Terminal\Terminal::readSecret(string $prompt = ''): string`
@@ -52,9 +52,10 @@ Enums:
 
 `Terminal\Terminal::supportsAnsi()` reports whether ANSI output is available for a stream. On Windows, it probes VT support without leaving the stream mode changed.
 `Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals. On Unix, any `NO_COLOR` environment entry disables ANSI support checks, including `NO_COLOR=`. `COLORTERM=truecolor`, `COLORTERM=24bit`, known `TERM_PROGRAM` values, and color-capable `TERM` values are treated as positive terminal capability signals.
-`Terminal\Terminal::write()` accepts `Terminal\Stream::Stdout` and `Terminal\Stream::Stderr`.
-`Terminal\Terminal::enableRawMode()` currently accepts `Terminal\Stream::Stdin` and returns an opaque `Terminal\ModeToken` that should be passed back to `Terminal\Terminal::restoreMode()`.
-`Terminal\ModeToken` is process-local, non-serializable, single-use after a successful restore, and intentionally has no public constructor or properties.
+Stream-aware methods accept either a `Terminal\Stream` case or an existing PHP stream resource. Resources backed by a native file descriptor or Windows handle can be used for terminal operations; unsupported wrappers return `false`. `Terminal\Terminal::write()` writes through the PHP stream layer when given a resource.
+`Terminal\Terminal::write()` accepts `Terminal\Stream::Stdout`, `Terminal\Stream::Stderr`, or a writable PHP stream resource.
+`Terminal\Terminal::enableRawMode()` accepts `Terminal\Stream::Stdin` or a compatible input stream resource and returns an opaque `Terminal\ModeToken` that should be passed back to `Terminal\Terminal::restoreMode()`.
+`Terminal\ModeToken` is process-local, non-serializable, single-use after a successful restore, and intentionally has no public constructor or properties. For resource-backed raw mode, it retains and verifies the originating stream before restore.
 `Terminal\Terminal::enableRawMode()` leaves terminal output processing intact, so normal prompt output such as `"\n"` keeps working while input is read one key at a time.
 On POSIX, raw-mode switches use `TCSANOW` so mode changes are immediate; callers that type ahead should not assume pending input was drained first.
 `Terminal\Terminal::readKey()` temporarily prepares standard input for key reads, restores the previous mode before returning, returns special keys as `Terminal\Key` cases, returns printable input as strings including UTF-8 input, and returns `false` when no key is available before the timeout. If standard input is already raw, `readKey()` preserves that state.
@@ -82,7 +83,7 @@ The earlier procedural API was removed while the project is still pre-1.0 so the
 
 The 0.1.x procedural API and `TERMINAL_*` constants were removed in favor of the namespaced class and enum API.
 
-| 0.1.x | 0.5.0 |
+| 0.1.x | 0.6.0 |
 | --- | --- |
 | `terminal_backend()` | `Terminal\Terminal::getBackend()` |
 | `terminal_is_tty(TERMINAL_STDOUT)` | `Terminal\Terminal::isTty(Terminal\Stream::Stdout)` |
@@ -140,11 +141,17 @@ extension=terminal
 extension=php_terminal.dll
 ```
 
-## Installing v0.5.0
+## Installing v0.6.0
 
-The `v0.5.0` release is available at:
+Install with PIE:
 
-https://github.com/prateekbhujel/php-terminal/releases/tag/v0.5.0
+```sh
+pie install prateekbhujel/php-terminal
+```
+
+The `v0.6.0` release is available at:
+
+https://github.com/prateekbhujel/php-terminal/releases/tag/v0.6.0
 
 Windows builds are attached for PHP 8.2-8.5, x64, TS/NTS. These are native Windows builds for normal Windows PHP runtimes, not WSL. Pick the zip that matches your PHP version and thread-safety mode, copy `php_terminal.dll` into your PHP extension directory, and enable it with:
 
@@ -157,9 +164,9 @@ Build from source on Unix-like systems:
 ```sh
 git clone https://github.com/prateekbhujel/php-terminal.git
 cd php-terminal
-git checkout v0.5.0
+git checkout v0.6.0
 phpize
-./configure --enable-terminal
+./configure
 make
 make test
 ```
@@ -174,11 +181,11 @@ For installed builds, use your normal `extension=terminal` configuration instead
 
 ### Build current main from source
 
-To test unreleased changes after `v0.5.0`:
+To test unreleased changes after `v0.6.0`:
 
 ```sh
 phpize
-./configure --enable-terminal
+./configure
 make
 make test
 ```
@@ -212,9 +219,9 @@ set PHP_BIN=C:\xampp\php\php.exe
 
 Download the matching zip from the release page. For example:
 
-- PHP 8.2, thread safety disabled: `php_terminal-v0.5.0-8.2-nts-vs16-x86_64.zip`
-- PHP 8.2, thread safety enabled: `php_terminal-v0.5.0-8.2-ts-vs16-x86_64.zip`
-- PHP 8.4, thread safety disabled: `php_terminal-v0.5.0-8.4-nts-vs17-x86_64.zip`
+- PHP 8.2, thread safety disabled: `php_terminal-v0.6.0-8.2-nts-vs16-x86_64.zip`
+- PHP 8.2, thread safety enabled: `php_terminal-v0.6.0-8.2-ts-vs16-x86_64.zip`
+- PHP 8.4, thread safety disabled: `php_terminal-v0.6.0-8.4-nts-vs17-x86_64.zip`
 
 Copy `php_terminal.dll` into that PHP installation's extension directory, for example:
 
@@ -271,9 +278,9 @@ if [ "$(uname -s)" = "Darwin" ]; then
     PHP_ARCH=$("${PHP_BIN}" -r 'echo php_uname("m");')
     CFLAGS="-arch ${PHP_ARCH}" \
     LDFLAGS="-arch ${PHP_ARCH}" \
-    ./configure --with-php-config="${PHP_CONFIG}" --enable-terminal
+    ./configure --with-php-config="${PHP_CONFIG}"
 else
-    ./configure --with-php-config="${PHP_CONFIG}" --enable-terminal
+    ./configure --with-php-config="${PHP_CONFIG}"
 fi
 
 make
@@ -350,7 +357,7 @@ Until Laravel Prompts has that adapter, existing Laravel Prompts releases will s
 
 The bundled `examples/prompt.php` file is intentionally small so framework authors can see the shape without reading a full TUI library.
 
-Future Laravel Prompts adapter work should target the `Terminal\Terminal` and enum API from `v0.5.0`.
+Future Laravel Prompts adapter work should target the `Terminal\Terminal` API from `v0.6.0`.
 
 For release feedback, open a new issue with the OS, terminal, PHP version, extension version, what you tried, and the behavior you expected.
 

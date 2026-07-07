@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.6.0 - 2026-07-08
+
+- Added PHP stream-resource support to stream-aware terminal methods, including `STDIN`, `STDOUT`, `STDERR`, and `php://` streams.
+- Retained and verified raw-mode stream resources through `Terminal\ModeToken` so restore operations target the originating stream.
+- Added PIE package metadata and made source builds enable `terminal` by default.
+- Replaced the unused PECL `package.xml` manifest because PECL no longer accepts new packages.
+- Added PHP 8.1 CI coverage and PIE metadata validation.
+
 ## 0.5.0 - 2026-06-18
 
 - Improved Windows ANSI detection so `Terminal\Terminal::supportsAnsi()` probes VT support without leaving ANSI mode enabled.

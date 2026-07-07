@@ -2,7 +2,7 @@ PHP_ARG_ENABLE([terminal],
   [whether to enable terminal support],
   [AS_HELP_STRING([--enable-terminal],
     [Enable terminal support])],
-  [no])
+  [yes])
 
 AS_VAR_IF([PHP_TERMINAL], [no],, [
   AC_DEFINE([HAVE_TERMINAL], [1],
