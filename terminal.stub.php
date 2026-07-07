@@ -58,17 +58,23 @@ final class Terminal
 {
     public static function getBackend(): Backend {}
 
-    public static function isTty(Stream $stream = Stream::Stdout): bool {}
+    /** @param Stream|resource $stream */
+    public static function isTty($stream = Stream::Stdout): bool {}
 
-    public static function supportsAnsi(Stream $stream = Stream::Stdout): bool {}
+    /** @param Stream|resource $stream */
+    public static function supportsAnsi($stream = Stream::Stdout): bool {}
 
-    public static function enableAnsi(Stream $stream = Stream::Stdout): bool {}
+    /** @param Stream|resource $stream */
+    public static function enableAnsi($stream = Stream::Stdout): bool {}
 
-    public static function getSize(Stream $stream = Stream::Stdout): array|false {}
+    /** @param Stream|resource $stream */
+    public static function getSize($stream = Stream::Stdout): array|false {}
 
-    public static function write(string $data, Stream $stream = Stream::Stdout): int|false {}
+    /** @param Stream|resource $stream */
+    public static function write(string $data, $stream = Stream::Stdout): int|false {}
 
-    public static function enableRawMode(Stream $stream = Stream::Stdin): ModeToken|false {}
+    /** @param Stream|resource $stream */
+    public static function enableRawMode($stream = Stream::Stdin): ModeToken|false {}
 
     public static function restoreMode(ModeToken $mode): bool {}
 
