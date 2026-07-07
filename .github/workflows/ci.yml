@@ -9,13 +9,27 @@ on:
   pull_request:
 
 jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          coverage: none
+
+      - name: Validate PIE package metadata
+        run: composer validate --strict
+
   unix:
     runs-on: ubuntu-latest
     continue-on-error: ${{ matrix.php-version == 'nightly' }}
     strategy:
       fail-fast: false
       matrix:
-        php-version: ['8.2', '8.3', '8.4', '8.5', 'nightly']
+        php-version: ['8.1', '8.2', '8.3', '8.4', '8.5', 'nightly']
     steps:
       - uses: actions/checkout@v5
 
@@ -28,7 +42,7 @@ jobs:
       - name: Prepare build
         run: |
           phpize
-          ./configure --enable-terminal
+          ./configure
 
       - name: Build
         run: make -j"$(nproc)"

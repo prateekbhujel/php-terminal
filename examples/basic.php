@@ -9,13 +9,13 @@ if (!extension_loaded('terminal')) {
 }
 
 var_dump(Terminal::getBackend());
-var_dump(Terminal::isTty());
-var_dump(Terminal::supportsAnsi());
-var_dump(Terminal::enableAnsi());
-var_dump(Terminal::getSize());
-var_dump(Terminal::write("hello from terminal\n"));
+var_dump(Terminal::isTty(STDOUT));
+var_dump(Terminal::supportsAnsi(STDOUT));
+var_dump(Terminal::enableAnsi(STDOUT));
+var_dump(Terminal::getSize(STDOUT));
+var_dump(Terminal::write("hello from terminal\n", STDOUT));
 
-$mode = Terminal::enableRawMode();
+$mode = Terminal::enableRawMode(STDIN);
 var_dump($mode === false || $mode instanceof ModeToken);
 if ($mode instanceof ModeToken) {
 	try {

@@ -7,6 +7,8 @@
 #include "php.h"
 #include "Zend/zend_smart_str.h"
 #include "Zend/zend_enum.h"
+#include "main/php_network.h"
+#include "main/php_streams.h"
 #include "ext/standard/basic_functions.h"
 #include "ext/standard/info.h"
 #include "php_terminal.h"
@@ -14,13 +16,14 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
 
 #ifdef PHP_WIN32
+# include <io.h>
 # include <windows.h>
 #else
-# include <stdint.h>
 # include <signal.h>
 # include <sys/select.h>
 # include <sys/time.h>
@@ -34,9 +37,16 @@
 #define TERMINAL_MODE_TOKEN_MAGIC_LEN (sizeof(TERMINAL_MODE_TOKEN_MAGIC) - 1)
 #define TERMINAL_SEQUENCE_TIMEOUT_MS 25
 
+#ifdef PHP_WIN32
+typedef HANDLE terminal_native_stream;
+#else
+typedef int terminal_native_stream;
+#endif
+
 typedef struct _terminal_saved_mode {
 	char magic[TERMINAL_MODE_TOKEN_MAGIC_LEN];
-	zend_long stream;
+	terminal_native_stream stream;
+	bool marks_standard_input;
 #ifdef PHP_WIN32
 	DWORD mode;
 #else
@@ -46,6 +56,7 @@ typedef struct _terminal_saved_mode {
 
 typedef struct _terminal_mode_token_object {
 	terminal_saved_mode saved;
+	zval stream_resource;
 	bool valid;
 	zend_object std;
 } terminal_mode_token_object;
@@ -68,6 +79,7 @@ static zend_object *terminal_mode_token_create_object(zend_class_entry *ce)
 	terminal_mode_token_object *intern = zend_object_alloc(sizeof(terminal_mode_token_object), ce);
 
 	memset(&intern->saved, 0, sizeof(intern->saved));
+	ZVAL_UNDEF(&intern->stream_resource);
 	intern->valid = false;
 
 	zend_object_std_init(&intern->std, ce);
@@ -81,19 +93,27 @@ static void terminal_mode_token_free_obj(zend_object *object)
 {
 	terminal_mode_token_object *intern = terminal_mode_token_from_obj(object);
 
+	if (!Z_ISUNDEF(intern->stream_resource)) {
+		zval_ptr_dtor(&intern->stream_resource);
+		ZVAL_UNDEF(&intern->stream_resource);
+	}
+
 	memset(&intern->saved, 0, sizeof(intern->saved));
 	intern->valid = false;
 
 	zend_object_std_dtor(&intern->std);
 }
 
-static void terminal_create_mode_token(zval *return_value, const terminal_saved_mode *saved)
+static void terminal_create_mode_token(zval *return_value, const terminal_saved_mode *saved, zval *stream_resource)
 {
 	terminal_mode_token_object *intern;
 
 	object_init_ex(return_value, terminal_mode_token_ce);
 	intern = Z_TERMINAL_MODE_TOKEN_P(return_value);
 	intern->saved = *saved;
+	if (stream_resource != NULL) {
+		ZVAL_COPY(&intern->stream_resource, stream_resource);
+	}
 	intern->valid = true;
 }
 
@@ -298,7 +318,7 @@ static bool terminal_no_color_is_set(void)
 
 static int terminal_win_stdin_is_raw = 0;
 
-static HANDLE terminal_handle_from_id(zend_long stream)
+static terminal_native_stream terminal_native_stream_from_id(zend_long stream)
 {
 	switch (stream) {
 		case TERMINAL_STREAM_STDIN:
@@ -312,19 +332,39 @@ static HANDLE terminal_handle_from_id(zend_long stream)
 	}
 }
 
-static bool terminal_stream_is_tty(zend_long stream)
+static terminal_native_stream terminal_native_stream_from_php_stream(php_stream *stream)
 {
-	HANDLE handle = terminal_handle_from_id(stream);
+	php_socket_t descriptor = (php_socket_t) -1;
+	intptr_t os_handle;
+
+	if (php_stream_cast(stream, PHP_STREAM_AS_FD | PHP_STREAM_CAST_INTERNAL, (void **) &descriptor, 0) != SUCCESS) {
+		return INVALID_HANDLE_VALUE;
+	}
+
+	if (descriptor == INVALID_SOCKET || (uintptr_t) descriptor > INT_MAX) {
+		return INVALID_HANDLE_VALUE;
+	}
+
+	os_handle = _get_osfhandle((int) descriptor);
+
+	return os_handle == -1 ? INVALID_HANDLE_VALUE : (HANDLE) os_handle;
+}
+
+static bool terminal_native_stream_is_valid(terminal_native_stream stream)
+{
+	return stream != INVALID_HANDLE_VALUE && stream != NULL;
+}
+
+static bool terminal_stream_is_tty(terminal_native_stream handle)
+{
 	DWORD mode;
 
-	return handle != INVALID_HANDLE_VALUE
-		&& handle != NULL
+	return terminal_native_stream_is_valid(handle)
 		&& GetConsoleMode(handle, &mode);
 }
 
-static bool terminal_stream_supports_ansi(zend_long stream)
+static bool terminal_stream_supports_ansi(terminal_native_stream handle)
 {
-	HANDLE handle = terminal_handle_from_id(stream);
 	DWORD mode;
 	DWORD ansi_mode;
 
@@ -332,7 +372,7 @@ static bool terminal_stream_supports_ansi(zend_long stream)
 		return false;
 	}
 
-	if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
+	if (!terminal_native_stream_is_valid(handle)) {
 		return false;
 	}
 
@@ -352,16 +392,15 @@ static bool terminal_stream_supports_ansi(zend_long stream)
 	return SetConsoleMode(handle, mode);
 }
 
-static bool terminal_enable_stream_ansi(zend_long stream)
+static bool terminal_enable_stream_ansi(terminal_native_stream handle)
 {
-	HANDLE handle = terminal_handle_from_id(stream);
 	DWORD mode;
 
 	if (terminal_no_color_is_set()) {
 		return false;
 	}
 
-	if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
+	if (!terminal_native_stream_is_valid(handle)) {
 		return false;
 	}
 
@@ -376,12 +415,11 @@ static bool terminal_enable_stream_ansi(zend_long stream)
 	return SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
 }
 
-static bool terminal_stream_size(zend_long stream, zend_long *columns, zend_long *rows)
+static bool terminal_stream_size(terminal_native_stream handle, zend_long *columns, zend_long *rows)
 {
-	HANDLE handle = terminal_handle_from_id(stream);
 	CONSOLE_SCREEN_BUFFER_INFO info;
 
-	if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
+	if (!terminal_native_stream_is_valid(handle)) {
 		return false;
 	}
 
@@ -395,12 +433,11 @@ static bool terminal_stream_size(zend_long stream, zend_long *columns, zend_long
 	return true;
 }
 
-static bool terminal_stream_write(zend_long stream, const char *buffer, size_t buffer_len, zend_long *written)
+static bool terminal_stream_write(terminal_native_stream handle, const char *buffer, size_t buffer_len, zend_long *written)
 {
-	HANDLE handle = terminal_handle_from_id(stream);
 	size_t total = 0;
 
-	if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
+	if (!terminal_native_stream_is_valid(handle)) {
 		return false;
 	}
 
@@ -434,20 +471,19 @@ static DWORD terminal_make_raw_mode(DWORD mode, bool mark_stdin_raw)
 	return mode & ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
 }
 
-static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mode *saved)
+static bool terminal_enable_stream_raw_mode(terminal_native_stream handle, bool marks_standard_input, terminal_saved_mode *saved)
 {
-	HANDLE handle = terminal_handle_from_id(stream);
 	DWORD mode;
 	DWORD raw_mode;
 
-	if (handle == INVALID_HANDLE_VALUE || handle == NULL || !GetConsoleMode(handle, &mode)) {
+	if (!terminal_native_stream_is_valid(handle) || !GetConsoleMode(handle, &mode)) {
 		return false;
 	}
 
-	raw_mode = terminal_make_raw_mode(mode, stream == TERMINAL_STREAM_STDIN);
+	raw_mode = terminal_make_raw_mode(mode, marks_standard_input);
 
 	if (!SetConsoleMode(handle, raw_mode)) {
-		if (stream == TERMINAL_STREAM_STDIN) {
+		if (marks_standard_input) {
 			terminal_win_stdin_is_raw = 0;
 		}
 		return false;
@@ -455,7 +491,8 @@ static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mod
 
 	memset(saved, 0, sizeof(*saved));
 	memcpy(saved->magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN);
-	saved->stream = stream;
+	saved->stream = handle;
+	saved->marks_standard_input = marks_standard_input;
 	saved->mode = mode;
 
 	return true;
@@ -463,12 +500,10 @@ static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mod
 
 static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
 {
-	HANDLE handle = terminal_handle_from_id(saved->stream);
-	bool restored = handle != INVALID_HANDLE_VALUE
-		&& handle != NULL
-		&& SetConsoleMode(handle, saved->mode);
+	bool restored = terminal_native_stream_is_valid(saved->stream)
+		&& SetConsoleMode(saved->stream, saved->mode);
 
-	if (restored && saved->stream == TERMINAL_STREAM_STDIN) {
+	if (restored && saved->marks_standard_input) {
 		terminal_win_stdin_is_raw = 0;
 	}
 
@@ -638,7 +673,7 @@ static zend_string *terminal_key_from_input_record(const KEY_EVENT_RECORD *key)
 
 static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
 {
-	HANDLE handle = terminal_handle_from_id(TERMINAL_STREAM_STDIN);
+	HANDLE handle = terminal_native_stream_from_id(TERMINAL_STREAM_STDIN);
 	DWORD mode = 0;
 	DWORD raw_mode;
 	DWORD wait_ms = terminal_timeout_to_wait_ms(timeout, timeout_is_null);
@@ -722,7 +757,7 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 
 static zend_string *terminal_read_stdin_secret(void)
 {
-	HANDLE handle = terminal_handle_from_id(TERMINAL_STREAM_STDIN);
+	HANDLE handle = terminal_native_stream_from_id(TERMINAL_STREAM_STDIN);
 	DWORD mode;
 	DWORD raw_mode;
 	smart_str secret = {0};
@@ -771,7 +806,7 @@ static zend_string *terminal_read_stdin_secret(void)
 			if (terminal_buffer_remove_last_utf8_char(&secret)) {
 				zend_long written;
 
-				terminal_stream_write(TERMINAL_STREAM_STDOUT, "\b \b", sizeof("\b \b") - 1, &written);
+				terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\b \b", sizeof("\b \b") - 1, &written);
 			}
 			continue;
 		}
@@ -790,7 +825,7 @@ static zend_string *terminal_read_stdin_secret(void)
 			}
 
 			if ((secret.s == NULL ? 0 : ZSTR_LEN(secret.s)) > before_len) {
-				terminal_stream_write(TERMINAL_STREAM_STDOUT, "*", 1, &written);
+				terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "*", 1, &written);
 			}
 		}
 	}
@@ -872,7 +907,7 @@ static bool terminal_consume_resize_pending(void)
 }
 #endif
 
-static int terminal_fd_from_id(zend_long stream)
+static terminal_native_stream terminal_native_stream_from_id(zend_long stream)
 {
 	switch (stream) {
 		case TERMINAL_STREAM_STDIN:
@@ -886,11 +921,30 @@ static int terminal_fd_from_id(zend_long stream)
 	}
 }
 
-static bool terminal_stream_is_tty(zend_long stream)
+static terminal_native_stream terminal_native_stream_from_php_stream(php_stream *stream)
 {
-	int fd = terminal_fd_from_id(stream);
+	php_socket_t descriptor = (php_socket_t) -1;
 
-	return fd >= 0 && isatty(fd) == 1;
+	if (php_stream_cast(stream, PHP_STREAM_AS_FD_FOR_SELECT | PHP_STREAM_CAST_INTERNAL, (void **) &descriptor, 0) != SUCCESS
+		&& php_stream_cast(stream, PHP_STREAM_AS_FD | PHP_STREAM_CAST_INTERNAL, (void **) &descriptor, 0) != SUCCESS) {
+		return -1;
+	}
+
+	if (descriptor < 0 || descriptor > INT_MAX) {
+		return -1;
+	}
+
+	return (int) descriptor;
+}
+
+static bool terminal_native_stream_is_valid(terminal_native_stream stream)
+{
+	return stream >= 0;
+}
+
+static bool terminal_stream_is_tty(terminal_native_stream fd)
+{
+	return terminal_native_stream_is_valid(fd) && isatty(fd) == 1;
 }
 
 static const char *terminal_getenv_nonempty(const char *name)
@@ -912,10 +966,9 @@ static const char *terminal_getenv_nonempty(const char *name)
  * 7. Known color-capable TERM values are ANSI capable.
  * 8. Fall back to isatty(fd).
  */
-static bool terminal_stream_supports_ansi(zend_long stream)
+static bool terminal_stream_supports_ansi(terminal_native_stream fd)
 {
-	int fd = terminal_fd_from_id(stream);
-	bool is_tty = fd >= 0 && isatty(fd) == 1;
+	bool is_tty;
 	const char *colorterm;
 	const char *term;
 	const char *term_program;
@@ -923,6 +976,10 @@ static bool terminal_stream_supports_ansi(zend_long stream)
 	if (getenv("NO_COLOR") != NULL) {
 		return false;
 	}
+	if (!terminal_native_stream_is_valid(fd)) {
+		return false;
+	}
+	is_tty = isatty(fd) == 1;
 
 	colorterm = terminal_getenv_nonempty("COLORTERM");
 	if (!is_tty && colorterm == NULL) {
@@ -964,17 +1021,16 @@ static bool terminal_stream_supports_ansi(zend_long stream)
 	return is_tty;
 }
 
-static bool terminal_enable_stream_ansi(zend_long stream)
+static bool terminal_enable_stream_ansi(terminal_native_stream stream)
 {
 	return terminal_stream_supports_ansi(stream);
 }
 
-static bool terminal_stream_size(zend_long stream, zend_long *columns, zend_long *rows)
+static bool terminal_stream_size(terminal_native_stream fd, zend_long *columns, zend_long *rows)
 {
-	int fd = terminal_fd_from_id(stream);
 	struct winsize ws;
 
-	if (fd < 0) {
+	if (!terminal_native_stream_is_valid(fd)) {
 		return false;
 	}
 
@@ -988,12 +1044,11 @@ static bool terminal_stream_size(zend_long stream, zend_long *columns, zend_long
 	return true;
 }
 
-static bool terminal_stream_write(zend_long stream, const char *buffer, size_t buffer_len, zend_long *written)
+static bool terminal_stream_write(terminal_native_stream fd, const char *buffer, size_t buffer_len, zend_long *written)
 {
-	int fd = terminal_fd_from_id(stream);
 	size_t total = 0;
 
-	if (fd < 0) {
+	if (!terminal_native_stream_is_valid(fd)) {
 		return false;
 	}
 
@@ -1040,13 +1095,14 @@ static void terminal_make_raw_mode(struct termios *mode)
 	mode->c_cc[VTIME] = 0;
 }
 
-static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mode *saved)
+static bool terminal_enable_stream_raw_mode(terminal_native_stream fd, bool marks_standard_input, terminal_saved_mode *saved)
 {
-	int fd = terminal_fd_from_id(stream);
 	struct termios mode;
 	struct termios raw_mode;
 
-	if (fd < 0 || tcgetattr(fd, &mode) != 0) {
+	(void) marks_standard_input;
+
+	if (!terminal_native_stream_is_valid(fd) || tcgetattr(fd, &mode) != 0) {
 		return false;
 	}
 
@@ -1059,7 +1115,7 @@ static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mod
 
 	memset(saved, 0, sizeof(*saved));
 	memcpy(saved->magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN);
-	saved->stream = stream;
+	saved->stream = fd;
 	saved->mode = mode;
 
 	return true;
@@ -1067,9 +1123,7 @@ static bool terminal_enable_stream_raw_mode(zend_long stream, terminal_saved_mod
 
 static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
 {
-	int fd = terminal_fd_from_id(saved->stream);
-
-	return fd >= 0 && tcsetattr(fd, TCSANOW, &saved->mode) == 0;
+	return saved->stream >= 0 && tcsetattr(saved->stream, TCSANOW, &saved->mode) == 0;
 }
 
 static int64_t terminal_current_time_ms(void)
@@ -1480,7 +1534,7 @@ static zend_string *terminal_key_from_byte(int fd, unsigned char key, int sequen
 
 static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
 {
-	int fd = terminal_fd_from_id(TERMINAL_STREAM_STDIN);
+	int fd = terminal_native_stream_from_id(TERMINAL_STREAM_STDIN);
 	int timeout_ms = terminal_timeout_to_ms(timeout, timeout_is_null);
 	int sequence_timeout_ms = terminal_sequence_timeout_to_ms(sequence_timeout, sequence_timeout_is_null);
 	struct termios mode;
@@ -1564,7 +1618,7 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 
 static zend_string *terminal_read_stdin_secret(void)
 {
-	int fd = terminal_fd_from_id(TERMINAL_STREAM_STDIN);
+	int fd = terminal_native_stream_from_id(TERMINAL_STREAM_STDIN);
 	struct termios mode;
 	struct termios raw_mode;
 	smart_str secret = {0};
@@ -1602,7 +1656,7 @@ static zend_string *terminal_read_stdin_secret(void)
 				if (terminal_buffer_remove_last_utf8_char(&secret)) {
 					zend_long written;
 
-					terminal_stream_write(TERMINAL_STREAM_STDOUT, "\b \b", sizeof("\b \b") - 1, &written);
+					terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\b \b", sizeof("\b \b") - 1, &written);
 				}
 				break;
 			case 0x03:
@@ -1628,7 +1682,7 @@ static zend_string *terminal_read_stdin_secret(void)
 
 					terminal_secret_append_utf8_sequence(fd, &secret, key);
 					if ((secret.s == NULL ? 0 : ZSTR_LEN(secret.s)) > before_len) {
-						terminal_stream_write(TERMINAL_STREAM_STDOUT, "*", 1, &written);
+						terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "*", 1, &written);
 					}
 				}
 				break;
@@ -1655,6 +1709,105 @@ restore:
 	return secret.s;
 }
 #endif
+
+typedef struct _terminal_stream_target {
+	bool is_enum;
+	zend_long enum_id;
+	php_stream *php_stream;
+	zval *stream_resource;
+	terminal_native_stream native_stream;
+} terminal_stream_target;
+
+static bool terminal_stream_target_init(
+	zval *stream_arg,
+	zend_long default_stream,
+	uint32_t arg_num,
+	terminal_stream_target *target
+)
+{
+	memset(target, 0, sizeof(*target));
+	target->is_enum = true;
+	target->enum_id = default_stream;
+	target->native_stream = terminal_native_stream_from_id(default_stream);
+
+	if (stream_arg == NULL) {
+		return true;
+	}
+
+	if (Z_TYPE_P(stream_arg) == IS_OBJECT
+		&& instanceof_function(Z_OBJCE_P(stream_arg), terminal_stream_ce)) {
+		target->enum_id = terminal_stream_from_enum(stream_arg);
+		target->native_stream = terminal_native_stream_from_id(target->enum_id);
+		return true;
+	}
+
+	if (Z_TYPE_P(stream_arg) == IS_RESOURCE) {
+		target->php_stream = (php_stream *) zend_fetch_resource2(
+			Z_RES_P(stream_arg),
+			"stream",
+			php_file_le_stream(),
+			php_file_le_pstream()
+		);
+		if (target->php_stream == NULL) {
+			return false;
+		}
+
+		target->is_enum = false;
+		target->stream_resource = stream_arg;
+		target->native_stream = terminal_native_stream_from_php_stream(target->php_stream);
+		return true;
+	}
+
+	zend_argument_type_error(
+		arg_num,
+		"must be of type Terminal\\Stream|resource, %s given",
+		zend_zval_type_name(stream_arg)
+	);
+
+	return false;
+}
+
+static bool terminal_php_stream_write_all(php_stream *stream, const char *buffer, size_t buffer_len, zend_long *written)
+{
+	size_t total = 0;
+
+	while (total < buffer_len) {
+		ssize_t chunk = php_stream_write(stream, buffer + total, buffer_len - total);
+
+		if (chunk <= 0) {
+			return false;
+		}
+
+		total += (size_t) chunk;
+	}
+
+	*written = (zend_long) total;
+
+	return true;
+}
+
+static bool terminal_mode_token_stream_is_valid(const terminal_mode_token_object *mode)
+{
+	php_stream *stream;
+
+	if (Z_ISUNDEF(mode->stream_resource)) {
+		return true;
+	}
+
+	if (Z_TYPE(mode->stream_resource) != IS_RESOURCE) {
+		return false;
+	}
+
+	stream = (php_stream *) zend_fetch_resource2(
+		Z_RES(mode->stream_resource),
+		NULL,
+		php_file_le_stream(),
+		php_file_le_pstream()
+	);
+
+	return stream != NULL
+		&& terminal_native_stream_from_php_stream(stream) == mode->saved.stream;
+}
 
 static void terminal_validate_output_stream_or_throw(zend_long stream, uint32_t arg_num)
 {
@@ -1690,77 +1843,79 @@ ZEND_METHOD(Terminal_Terminal, getBackend)
 
 ZEND_METHOD(Terminal_Terminal, isTty)
 {
-	zval *stream_case = NULL;
-	zend_long stream = TERMINAL_STREAM_STDOUT;
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
 
 	ZEND_PARSE_PARAMETERS_START(0, 1)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_OBJECT_OF_CLASS(stream_case, terminal_stream_ce)
+		Z_PARAM_ZVAL(stream_arg)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (stream_case != NULL) {
-		stream = terminal_stream_from_enum(stream_case);
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 1, &stream)) {
+		RETURN_THROWS();
 	}
 
-	RETURN_BOOL(terminal_stream_is_tty(stream));
+	RETURN_BOOL(terminal_stream_is_tty(stream.native_stream));
 }
 
 ZEND_METHOD(Terminal_Terminal, supportsAnsi)
 {
-	zval *stream_case = NULL;
-	zend_long stream = TERMINAL_STREAM_STDOUT;
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
 
 	ZEND_PARSE_PARAMETERS_START(0, 1)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_OBJECT_OF_CLASS(stream_case, terminal_stream_ce)
+		Z_PARAM_ZVAL(stream_arg)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (stream_case != NULL) {
-		stream = terminal_stream_from_enum(stream_case);
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 1, &stream)) {
+		RETURN_THROWS();
 	}
 
-	RETURN_BOOL(terminal_stream_supports_ansi(stream));
+	RETURN_BOOL(terminal_stream_supports_ansi(stream.native_stream));
 }
 
 ZEND_METHOD(Terminal_Terminal, enableAnsi)
 {
-	zval *stream_case = NULL;
-	zend_long stream = TERMINAL_STREAM_STDOUT;
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
 
 	ZEND_PARSE_PARAMETERS_START(0, 1)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_OBJECT_OF_CLASS(stream_case, terminal_stream_ce)
+		Z_PARAM_ZVAL(stream_arg)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (stream_case != NULL) {
-		stream = terminal_stream_from_enum(stream_case);
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 1, &stream)) {
+		RETURN_THROWS();
 	}
 
-	terminal_validate_output_stream_or_throw(stream, 1);
+	if (stream.is_enum) {
+		terminal_validate_output_stream_or_throw(stream.enum_id, 1);
+	}
 	if (EG(exception)) {
 		RETURN_THROWS();
 	}
 
-	RETURN_BOOL(terminal_enable_stream_ansi(stream));
+	RETURN_BOOL(terminal_enable_stream_ansi(stream.native_stream));
 }
 
 ZEND_METHOD(Terminal_Terminal, getSize)
 {
-	zval *stream_case = NULL;
-	zend_long stream = TERMINAL_STREAM_STDOUT;
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
 	zend_long columns;
 	zend_long rows;
 
 	ZEND_PARSE_PARAMETERS_START(0, 1)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_OBJECT_OF_CLASS(stream_case, terminal_stream_ce)
+		Z_PARAM_ZVAL(stream_arg)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (stream_case != NULL) {
-		stream = terminal_stream_from_enum(stream_case);
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 1, &stream)) {
+		RETURN_THROWS();
 	}
 
-	if (!terminal_stream_size(stream, &columns, &rows)
+	if (!terminal_stream_size(stream.native_stream, &columns, &rows)
 		&& !terminal_size_from_environment(&columns, &rows)) {
 		RETURN_FALSE;
 	}
@@ -1773,26 +1928,32 @@ ZEND_METHOD(Terminal_Terminal, getSize)
 ZEND_METHOD(Terminal_Terminal, write)
 {
 	zend_string *data;
-	zval *stream_case = NULL;
-	zend_long stream = TERMINAL_STREAM_STDOUT;
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
 	zend_long written;
 
 	ZEND_PARSE_PARAMETERS_START(1, 2)
 		Z_PARAM_STR(data)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_OBJECT_OF_CLASS(stream_case, terminal_stream_ce)
+		Z_PARAM_ZVAL(stream_arg)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (stream_case != NULL) {
-		stream = terminal_stream_from_enum(stream_case);
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 2, &stream)) {
+		RETURN_THROWS();
 	}
 
-	terminal_validate_output_stream_or_throw(stream, 2);
+	if (stream.is_enum) {
+		terminal_validate_output_stream_or_throw(stream.enum_id, 2);
+	}
 	if (EG(exception)) {
 		RETURN_THROWS();
 	}
 
-	if (!terminal_stream_write(stream, ZSTR_VAL(data), ZSTR_LEN(data), &written)) {
+	if (stream.php_stream != NULL) {
+		if (!terminal_php_stream_write_all(stream.php_stream, ZSTR_VAL(data), ZSTR_LEN(data), &written)) {
+			RETURN_FALSE;
+		}
+	} else if (!terminal_stream_write(stream.native_stream, ZSTR_VAL(data), ZSTR_LEN(data), &written)) {
 		RETURN_FALSE;
 	}
 
@@ -1801,29 +1962,35 @@ ZEND_METHOD(Terminal_Terminal, write)
 
 ZEND_METHOD(Terminal_Terminal, enableRawMode)
 {
-	zval *stream_case = NULL;
-	zend_long stream = TERMINAL_STREAM_STDIN;
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
 	terminal_saved_mode saved;
 
 	ZEND_PARSE_PARAMETERS_START(0, 1)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_OBJECT_OF_CLASS(stream_case, terminal_stream_ce)
+		Z_PARAM_ZVAL(stream_arg)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (stream_case != NULL) {
-		stream = terminal_stream_from_enum(stream_case);
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDIN, 1, &stream)) {
+		RETURN_THROWS();
 	}
 
-	terminal_validate_input_stream_or_throw(stream, 1);
+	if (stream.is_enum) {
+		terminal_validate_input_stream_or_throw(stream.enum_id, 1);
+	}
 	if (EG(exception)) {
 		RETURN_THROWS();
 	}
 
-	if (!terminal_enable_stream_raw_mode(stream, &saved)) {
+	if (!terminal_enable_stream_raw_mode(
+		stream.native_stream,
+		stream.native_stream == terminal_native_stream_from_id(TERMINAL_STREAM_STDIN),
+		&saved
+	)) {
 		RETURN_FALSE;
 	}
 
-	terminal_create_mode_token(return_value, &saved);
+	terminal_create_mode_token(return_value, &saved, stream.stream_resource);
 }
 
 ZEND_METHOD(Terminal_Terminal, restoreMode)
@@ -1843,8 +2010,16 @@ ZEND_METHOD(Terminal_Terminal, restoreMode)
 		RETURN_THROWS();
 	}
 
+	if (!terminal_mode_token_stream_is_valid(mode)) {
+		RETURN_FALSE;
+	}
+
 	restored = terminal_restore_stream_mode(&mode->saved);
 	if (restored) {
+		if (!Z_ISUNDEF(mode->stream_resource)) {
+			zval_ptr_dtor(&mode->stream_resource);
+			ZVAL_UNDEF(&mode->stream_resource);
+		}
 		memset(&mode->saved, 0, sizeof(mode->saved));
 		mode->valid = false;
 	}
@@ -1904,7 +2079,7 @@ ZEND_METHOD(Terminal_Terminal, readSecret)
 	if (prompt != NULL && ZSTR_LEN(prompt) > 0) {
 		zend_long written;
 
-		if (!terminal_stream_write(TERMINAL_STREAM_STDOUT, ZSTR_VAL(prompt), ZSTR_LEN(prompt), &written)
+		if (!terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), ZSTR_VAL(prompt), ZSTR_LEN(prompt), &written)
 			|| written != (zend_long) ZSTR_LEN(prompt)) {
 			zend_throw_error(NULL, "Unable to write secret prompt");
 			RETURN_THROWS();

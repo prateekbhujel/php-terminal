@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: bf2bf4ea30adf6cccab83fbcd5cf1e7e90861ea6 */
+ * Stub hash: 2fb950155c5a708276c397a66ee24752e8c8feda */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Terminal_ModeToken___construct, 0, 0, 0)
 ZEND_END_ARG_INFO()
@@ -8,7 +8,7 @@ ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Terminal_Terminal_getBacken
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Terminal_Terminal_isTty, 0, 0, _IS_BOOL, 0)
-	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, stream, Terminal\\Stream, 0, "Terminal\\Stream::Stdout")
+	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(0, stream, "Terminal\\Stream::Stdout")
 ZEND_END_ARG_INFO()
 
 #define arginfo_class_Terminal_Terminal_supportsAnsi arginfo_class_Terminal_Terminal_isTty
@@ -16,16 +16,16 @@ ZEND_END_ARG_INFO()
 #define arginfo_class_Terminal_Terminal_enableAnsi arginfo_class_Terminal_Terminal_isTty
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_getSize, 0, 0, MAY_BE_ARRAY|MAY_BE_FALSE)
-	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, stream, Terminal\\Stream, 0, "Terminal\\Stream::Stdout")
+	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(0, stream, "Terminal\\Stream::Stdout")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_write, 0, 1, MAY_BE_LONG|MAY_BE_FALSE)
 	ZEND_ARG_TYPE_INFO(0, data, IS_STRING, 0)
-	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, stream, Terminal\\Stream, 0, "Terminal\\Stream::Stdout")
+	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(0, stream, "Terminal\\Stream::Stdout")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_enableRawMode, 0, 0, Terminal\\ModeToken, MAY_BE_FALSE)
-	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, stream, Terminal\\Stream, 0, "Terminal\\Stream::Stdin")
+	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(0, stream, "Terminal\\Stream::Stdin")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Terminal_Terminal_restoreMode, 0, 1, _IS_BOOL, 0)
