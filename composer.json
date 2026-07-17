@@ -1,20 +1,32 @@
 {
     "name": "prateekbhujel/php-terminal",
-    "description": "Cross-platform terminal helpers for PHP CLI",
+    "description": "Native terminal primitives for PHP CLI on Unix and Windows",
     "type": "php-ext",
     "license": "PHP-3.01",
     "keywords": [
+        "ansi",
         "cli",
+        "console",
         "extension",
-        "terminal"
+        "keyboard",
+        "php-extension",
+        "pie",
+        "raw-mode",
+        "terminal",
+        "tty",
+        "unix",
+        "windows"
     ],
+    "homepage": "https://github.com/prateekbhujel/php-terminal",
     "authors": [
         {
             "name": "Pratik Bhujel",
-            "email": "prateekbhujelpb@gmail.com"
+            "email": "prateekbhujelpb@gmail.com",
+            "role": "Maintainer"
         }
     ],
     "support": {
+        "docs": "https://github.com/prateekbhujel/php-terminal#readme",
         "issues": "https://github.com/prateekbhujel/php-terminal/issues",
         "source": "https://github.com/prateekbhujel/php-terminal"
     },
