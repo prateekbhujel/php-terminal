@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">php-terminal mark</title>
+  <desc id="desc">A terminal window with a PHP prompt.</desc>
+  <rect width="128" height="128" rx="24" fill="#20242a"/>
+  <rect x="18" y="24" width="92" height="80" rx="10" fill="#111418" stroke="#f28c18" stroke-width="4"/>
+  <circle cx="32" cy="38" r="4" fill="#ff5f56"/>
+  <circle cx="46" cy="38" r="4" fill="#ffbd2e"/>
+  <circle cx="60" cy="38" r="4" fill="#27c93f"/>
+  <path d="M32 60l18 14-18 14" fill="none" stroke="#f28c18" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M58 88h34" fill="none" stroke="#f3f4f6" stroke-width="8" stroke-linecap="round"/>
+  <text x="65" y="67" fill="#f3f4f6" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" font-weight="700">PHP</text>
+</svg>

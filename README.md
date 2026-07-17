@@ -1,14 +1,43 @@
-# terminal
+<p align="center">
+  <img src="https://raw.githubusercontent.com/prateekbhujel/php-terminal/main/docs/assets/php-terminal-mark.svg" alt="php-terminal" width="96" height="96">
+</p>
 
-`terminal` is a PHP extension for basic terminal capabilities on Unix-like systems and Windows.
+# terminal for PHP CLI
 
-The first cut stays small on purpose. It exposes the pieces that are awkward to normalize in userland, especially once Windows enters the picture, without trying to become a full TUI toolkit.
+<p align="center">
+  <strong>Native terminal primitives for PHP CLI on Unix-like systems and Windows.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/prateekbhujel/php-terminal/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/prateekbhujel/php-terminal/ci.yml?branch=main&label=CI&logo=github" alt="CI status"></a>
+  <a href="https://github.com/prateekbhujel/php-terminal/releases"><img src="https://img.shields.io/github/v/release/prateekbhujel/php-terminal?display_name=tag&sort=semver&logo=github" alt="Latest release"></a>
+  <a href="https://packagist.org/packages/prateekbhujel/php-terminal"><img src="https://img.shields.io/packagist/v/prateekbhujel/php-terminal?label=Packagist&logo=packagist" alt="Packagist version"></a>
+  <img src="https://img.shields.io/badge/PHP-%3E%3D8.1-777bb4?logo=php&logoColor=white" alt="PHP 8.1 or newer">
+  <img src="https://img.shields.io/badge/type-php--ext-f28c18" alt="PHP extension">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/prateekbhujel/php-terminal" alt="License"></a>
+</p>
+
+`terminal` is a PHP extension for terminal capabilities on Unix-like systems and Windows.
+
+It exposes the pieces that are awkward to normalize in userland, especially once Windows enters the picture, without trying to become a full TUI toolkit: TTY detection, ANSI/VT support, terminal sizing, raw mode, key reads, secret input, direct writes, and safe restore handling.
 
 Created and maintained by Pratik Bhujel.
 
 Current release: `v0.6.0`.
 
 `v0.6.0` lets stream-aware methods use existing PHP stream resources such as `STDIN`, `STDOUT`, `STDERR`, and `php://stdout` while preserving the `Terminal\Stream` enum defaults. It also adds PIE installation metadata. The older `v0.2.0` release used the first procedural `terminal_*()` API.
+
+## Install
+
+```sh
+pie install prateekbhujel/php-terminal
+```
+
+Windows DLL builds are attached to each release for PHP 8.2-8.5 in x64 TS/NTS variants.
+
+## Project status
+
+`terminal` is pre-1.0 ecosystem work for PHP CLI tooling. API feedback, terminal compatibility reports, Windows testing, and focused pull requests are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the most useful contribution areas.
 
 ## Why this exists
 
@@ -367,7 +396,7 @@ For release feedback, open a new issue with the OS, terminal, PHP version, exten
 
 ```sh
 phpize
-./configure --enable-terminal
+./configure
 make
 make test
 ```
