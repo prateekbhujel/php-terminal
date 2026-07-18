@@ -211,9 +211,10 @@ make
 make test
 ```
 
-Then try the prompt example:
+Then try the stream-resource and prompt examples:
 
 ```sh
+php -d extension=modules/terminal.so examples/streams.php
 php -d extension=modules/terminal.so examples/prompt.php
 ```
 
@@ -230,9 +231,10 @@ make
 make test
 ```
 
-Then try the prompt example:
+Then try the stream-resource and prompt examples:
 
 ```sh
+php -d extension=modules/terminal.so examples/streams.php
 php -d extension=modules/terminal.so examples/prompt.php
 ```
 
