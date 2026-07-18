@@ -39,6 +39,17 @@ Windows DLL builds are attached to each release for PHP 8.2-8.5 in x64 TS/NTS va
 
 `terminal` is pre-1.0 ecosystem work for PHP CLI tooling. API feedback, terminal compatibility reports, Windows testing, and focused pull requests are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the most useful contribution areas.
 
+## Compatibility
+
+| Area | Current support |
+| --- | --- |
+| PHP | `>=8.1` |
+| Unix-like systems | Linux CI plus POSIX backend support for macOS |
+| Windows | Native x64 TS/NTS builds for PHP 8.2-8.5 |
+| Install path | PIE, Windows release zips, or source builds with `phpize` |
+
+See [docs/compatibility.md](./docs/compatibility.md) for platform boundaries, build notes, and stream-resource behavior.
+
 ## Why this exists
 
 PHP already has useful pieces such as `stream_isatty()` and `sapi_windows_vt100_support()`, but there is still no small extension that exposes a shared terminal capability layer across Unix and Windows.
@@ -433,4 +444,4 @@ if ($mode instanceof ModeToken) {
 }
 ```
 
-There are runnable examples in [`examples/basic.php`](./examples/basic.php), [`examples/doctor.php`](./examples/doctor.php), and [`examples/prompt.php`](./examples/prompt.php).
+There are runnable examples in [`examples/basic.php`](./examples/basic.php), [`examples/doctor.php`](./examples/doctor.php), [`examples/prompt.php`](./examples/prompt.php), and [`examples/streams.php`](./examples/streams.php).

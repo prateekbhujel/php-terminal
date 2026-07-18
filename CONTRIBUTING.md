@@ -16,6 +16,9 @@ Good contribution areas:
   prompt libraries.
 - Documentation that clarifies real installation or runtime behavior.
 
+Read [docs/compatibility.md](./docs/compatibility.md) before changing platform
+claims or adding new support notes.
+
 When reporting an issue, include:
 
 - operating system and terminal emulator
