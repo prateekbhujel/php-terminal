@@ -1,0 +1,22 @@
+* text=auto eol=lf
+
+*.c text eol=lf
+*.h text eol=lf
+*.m4 text eol=lf
+*.md text eol=lf
+*.phpt text eol=lf
+*.php text eol=lf
+*.stub.php text eol=lf
+*.svg text eol=lf
+*.w32 text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+
+*.dll binary
+*.dylib binary
+*.lib binary
+*.so binary
+*.zip binary
+
+.github/ export-ignore
+.gitignore export-ignore
