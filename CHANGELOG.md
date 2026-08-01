@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added compatibility notes for supported PHP versions, platforms, install paths, and stream-resource boundaries.
+- Added non-interactive stream-resource and pipe-safe basic examples with PHPT coverage.
+- Added source/archive hygiene through `.gitattributes`.
+
 ## 0.6.0 - 2026-07-08
 
 - Added PHP stream-resource support to stream-aware terminal methods, including `STDIN`, `STDOUT`, `STDERR`, and `php://` streams.

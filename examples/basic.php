@@ -1,6 +1,7 @@
 <?php
 
 use Terminal\ModeToken;
+use Terminal\Stream;
 use Terminal\Terminal;
 
 if (!extension_loaded('terminal')) {
@@ -14,6 +15,11 @@ var_dump(Terminal::supportsAnsi(STDOUT));
 var_dump(Terminal::enableAnsi(STDOUT));
 var_dump(Terminal::getSize(STDOUT));
 var_dump(Terminal::write("hello from terminal\n", STDOUT));
+
+if (!Terminal::isTty(Stream::Stdin)) {
+	Terminal::write("interactive demos: skipped, stdin is not a terminal\n");
+	exit(0);
+}
 
 $mode = Terminal::enableRawMode(STDIN);
 var_dump($mode === false || $mode instanceof ModeToken);
