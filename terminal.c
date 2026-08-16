@@ -316,7 +316,10 @@ static bool terminal_no_color_is_set(void)
 	return terminal_env_is_non_empty("NO_COLOR", sizeof("NO_COLOR") - 1);
 }
 
-static int terminal_win_stdin_is_raw = 0;
+/* Process-global: Windows has one console per process, so this is
+ * inherently shared across ZTS threads. Mark volatile so the compiler
+ * does not reorder or cache reads around SetConsoleMode calls. */
+static volatile int terminal_win_stdin_is_raw = 0;
 
 static terminal_native_stream terminal_native_stream_from_id(zend_long stream)
 {
@@ -798,6 +801,9 @@ static zend_string *terminal_read_stdin_secret(void)
 		key = &record.Event.KeyEvent;
 
 		if (key->wVirtualKeyCode == VK_RETURN) {
+			zend_long nl_written;
+
+			terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\n", 1, &nl_written);
 			success = true;
 			break;
 		}
@@ -812,6 +818,9 @@ static zend_string *terminal_read_stdin_secret(void)
 		}
 
 		if (key->wVirtualKeyCode == VK_ESCAPE || key->uChar.UnicodeChar == 0x03 || key->uChar.UnicodeChar == 0x04) {
+			zend_long nl_written;
+
+			terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\n", 1, &nl_written);
 			break;
 		}
 
@@ -1649,8 +1658,13 @@ static zend_string *terminal_read_stdin_secret(void)
 		switch (key) {
 			case '\r':
 			case '\n':
+			{
+				zend_long nl_written;
+
+				terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\n", 1, &nl_written);
 				success = true;
 				goto restore;
+			}
 			case 0x7f:
 			case '\b':
 				if (terminal_buffer_remove_last_utf8_char(&secret)) {
@@ -1661,7 +1675,12 @@ static zend_string *terminal_read_stdin_secret(void)
 				break;
 			case 0x03:
 			case 0x04:
+			{
+				zend_long nl_written;
+
+				terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\n", 1, &nl_written);
 				goto restore;
+			}
 			case 0x1b:
 			{
 				zend_string *escape_key = terminal_key_from_escape_sequence(fd, TERMINAL_SEQUENCE_TIMEOUT_MS);
@@ -2079,8 +2098,7 @@ ZEND_METHOD(Terminal_Terminal, readSecret)
 	if (prompt != NULL && ZSTR_LEN(prompt) > 0) {
 		zend_long written;
 
-		if (!terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), ZSTR_VAL(prompt), ZSTR_LEN(prompt), &written)
-			|| written != (zend_long) ZSTR_LEN(prompt)) {
+		if (!terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), ZSTR_VAL(prompt), ZSTR_LEN(prompt), &written)) {
 			zend_throw_error(NULL, "Unable to write secret prompt");
 			RETURN_THROWS();
 		}
@@ -2127,6 +2145,7 @@ PHP_MINFO_FUNCTION(terminal)
 
 	php_info_print_table_start();
 	php_info_print_table_row(2, "terminal support", "enabled");
+	php_info_print_table_row(2, "terminal version", PHP_TERMINAL_VERSION);
 #ifdef PHP_WIN32
 	php_info_print_table_row(2, "backend", "windows");
 #else
