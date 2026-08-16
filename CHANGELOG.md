@@ -5,6 +5,11 @@
 - Added compatibility notes for supported PHP versions, platforms, install paths, and stream-resource boundaries.
 - Added non-interactive stream-resource and pipe-safe basic examples with PHPT coverage.
 - Added source/archive hygiene through `.gitattributes`.
+- Fixed `readSecret()` to print a newline to stdout when the user presses Enter, so subsequent output starts on a fresh line.
+- Fixed `readSecret()` to print a newline to stdout when the user aborts with Ctrl-C, Ctrl-D, or Escape, so the terminal stays clean.
+- Removed dead partial-write check in `readSecret()` prompt write path.
+- Marked the Windows raw-mode guard flag as `volatile` for correct compiler behavior under ZTS.
+- Added extension version to `phpinfo()` output.
 
 ## 0.6.0 - 2026-07-08
 
