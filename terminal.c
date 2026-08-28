@@ -67,6 +67,9 @@ static zend_class_entry *terminal_key_ce;
 static zend_class_entry *terminal_mode_token_ce;
 static zend_object_handlers terminal_mode_token_handlers;
 
+static bool terminal_mode_token_stream_is_valid(const terminal_mode_token_object *mode);
+static bool terminal_restore_stream_mode(const terminal_saved_mode *saved);
+
 static inline terminal_mode_token_object *terminal_mode_token_from_obj(zend_object *obj)
 {
 	return (terminal_mode_token_object *) ((char *) obj - offsetof(terminal_mode_token_object, std));
@@ -92,6 +95,12 @@ static zend_object *terminal_mode_token_create_object(zend_class_entry *ce)
 static void terminal_mode_token_free_obj(zend_object *object)
 {
 	terminal_mode_token_object *intern = terminal_mode_token_from_obj(object);
+
+	if (intern->valid && memcmp(intern->saved.magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN) == 0) {
+		if (terminal_mode_token_stream_is_valid(intern)) {
+			terminal_restore_stream_mode(&intern->saved);
+		}
+	}
 
 	if (!Z_ISUNDEF(intern->stream_resource)) {
 		zval_ptr_dtor(&intern->stream_resource);
@@ -296,24 +305,16 @@ static bool terminal_size_from_environment(zend_long *columns, zend_long *rows)
 }
 
 #ifdef PHP_WIN32
-static bool terminal_env_is_non_empty(const char *name, size_t name_len)
+static bool terminal_no_color_is_set(void)
 {
-	zend_string *value = php_getenv(name, name_len);
-	bool result;
+	zend_string *value = php_getenv("NO_COLOR", sizeof("NO_COLOR") - 1);
 
 	if (value == NULL) {
 		return false;
 	}
 
-	result = ZSTR_LEN(value) > 0;
 	zend_string_release(value);
-
-	return result;
-}
-
-static bool terminal_no_color_is_set(void)
-{
-	return terminal_env_is_non_empty("NO_COLOR", sizeof("NO_COLOR") - 1);
+	return true;
 }
 
 /* Process-global: Windows has one console per process, so this is
@@ -1322,7 +1323,14 @@ static zend_string *terminal_key_from_csi_sequence(const unsigned char *sequence
 			unsigned int number = 0;
 
 			while (i < sequence_len - 1 && sequence[i] >= '0' && sequence[i] <= '9') {
-				number = (number * 10) + (unsigned int) (sequence[i] - '0');
+				unsigned int digit = (unsigned int) (sequence[i] - '0');
+
+				if (number > (UINT_MAX - digit) / 10) {
+					number = 0;
+					break;
+				}
+
+				number = (number * 10) + digit;
 				i++;
 			}
 
@@ -1404,7 +1412,7 @@ static zend_string *terminal_key_from_ss3_sequence(unsigned char key)
 
 static bool terminal_is_csi_final_byte(unsigned char key)
 {
-	return (key >= 'A' && key <= 'Z') || key == '~';
+	return key >= 0x40 && key <= 0x7e;
 }
 
 static zend_string *terminal_key_from_escape_sequence(int fd, int sequence_timeout_ms)
@@ -1689,6 +1697,9 @@ static zend_string *terminal_read_stdin_secret(void)
 				zend_string_release(escape_key);
 
 				if (is_escape) {
+					zend_long nl_written;
+
+					terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\n", 1, &nl_written);
 					goto restore;
 				}
 
@@ -2061,12 +2072,12 @@ ZEND_METHOD(Terminal_Terminal, readKey)
 		Z_PARAM_DOUBLE_OR_NULL(sequence_timeout, sequence_timeout_is_null)
 	ZEND_PARSE_PARAMETERS_END();
 
-	if (!timeout_is_null && timeout < 0) {
+	if (!timeout_is_null && (zend_isnan(timeout) || timeout < 0)) {
 		zend_argument_value_error(1, "must be greater than or equal to 0");
 		RETURN_THROWS();
 	}
 
-	if (!sequence_timeout_is_null && sequence_timeout < 0) {
+	if (!sequence_timeout_is_null && (zend_isnan(sequence_timeout) || sequence_timeout < 0)) {
 		zend_argument_value_error(2, "must be greater than or equal to 0");
 		RETURN_THROWS();
 	}
