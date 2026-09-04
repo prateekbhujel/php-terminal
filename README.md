@@ -91,7 +91,7 @@ Enums:
 - `Terminal\Key`: `Up`, `Down`, `Left`, `Right`, `Enter`, `Backspace`, `Escape`, `Tab`, `Home`, `End`, `Delete`, `PageUp`, `PageDown`, `Resize`, `F1` through `F12`
 
 `Terminal\Terminal::supportsAnsi()` reports whether ANSI output is available for a stream. On Windows, it probes VT support without leaving the stream mode changed.
-`Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals. On Unix, any `NO_COLOR` environment entry disables ANSI support checks, including `NO_COLOR=`. `COLORTERM=truecolor`, `COLORTERM=24bit`, known `TERM_PROGRAM` values, and color-capable `TERM` values are treated as positive terminal capability signals.
+`Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals. Any `NO_COLOR` environment entry disables ANSI support checks, taking precedence over color flags. Non-zero `CLICOLOR_FORCE` enables ANSI output even for redirected or CI streams. `COLORTERM=truecolor`, `COLORTERM=24bit`, `WT_SESSION` on Windows, known `TERM_PROGRAM` values (`Apple_Terminal`, `ghostty`, `warp`, `iTerm.app`, `Hyper`, `WezTerm`, `vscode`, `Tabby`), and color-capable `TERM` values (`xterm*`, `screen*`, `tmux*`, `rxvt*`, `linux`, `vt100`, `vt220`, `ansi`) are recognized as positive capability signals.
 Stream-aware methods accept either a `Terminal\Stream` case or an existing PHP stream resource. Resources backed by a native file descriptor or Windows handle can be used for terminal operations; unsupported wrappers return `false`. `Terminal\Terminal::write()` writes through the PHP stream layer when given a resource.
 `Terminal\Terminal::write()` accepts `Terminal\Stream::Stdout`, `Terminal\Stream::Stderr`, or a writable PHP stream resource.
 `Terminal\Terminal::enableRawMode()` accepts `Terminal\Stream::Stdin` or a compatible input stream resource and returns an opaque `Terminal\ModeToken` that should be passed back to `Terminal\Terminal::restoreMode()`.
@@ -110,8 +110,8 @@ $password = Terminal::readSecret('Password: ');
 
 Current key input scope:
 
-- normalized keys: arrows, enter, backspace, escape, tab, home, end, delete, page up, page down, resize
-- function keys: F1-F12 on Windows and Unix terminals that emit SS3 or CSI tilde sequences
+- normalized keys: arrows, enter, backspace, escape, tab (including Shift+Tab / BackTab `\e[Z`), home, end, delete, page up, page down, resize
+- function keys: F1-F12 on Windows and Unix terminals that emit SS3, CSI, or CSI tilde sequences
 - printable input: returned as a string containing the next encoded code point
 - control bytes such as Ctrl+C: returned as single-byte strings by `readKey()`
 - not normalized yet: modifier combinations and full grapheme clusters

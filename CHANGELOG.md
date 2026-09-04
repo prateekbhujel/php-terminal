@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added Shift+Tab (`\e[Z` / BackTab) normalization to `Terminal\Key::Tab` on POSIX, matching Windows behavior.
+- Added CSI F1–F4 (`\e[P`, `\e[Q`, `\e[R`, `\e[S`) key normalization.
+- Added `CLICOLOR_FORCE` standard support on Unix and Windows, enabling ANSI output for redirected/CI streams while preserving `NO_COLOR` precedence.
+- Added `Apple_Terminal`, `ghostty`, and `warp` to recognized `TERM_PROGRAM` values, and `WT_SESSION` on Windows.
+- Extended color-capable `TERM` recognition to `xterm*`, `screen*`, `tmux*`, `rxvt*`, `linux`, `vt100`, `vt220`, and `ansi`.
+- Fixed PIE package metadata schema in `composer.json` for strict validation.
 - Added compatibility notes for supported PHP versions, platforms, install paths, and stream-resource boundaries.
 - Added non-interactive stream-resource and pipe-safe basic examples with PHPT coverage.
 - Added source/archive hygiene through `.gitattributes`.

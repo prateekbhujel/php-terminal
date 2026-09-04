@@ -35,10 +35,7 @@
     },
     "php-ext": {
         "extension-name": "terminal",
-        "download-url-method": [
-            "pre-packaged-binary",
-            "composer-default"
-        ],
+        "download-url-method": "composer-default",
         "support-zts": true,
         "support-nts": true
     }
