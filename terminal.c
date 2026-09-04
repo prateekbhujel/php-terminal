@@ -367,6 +367,31 @@ static bool terminal_stream_is_tty(terminal_native_stream handle)
 		&& GetConsoleMode(handle, &mode);
 }
 
+static bool terminal_clicolor_force_is_set(void)
+{
+	zend_string *value = php_getenv("CLICOLOR_FORCE", sizeof("CLICOLOR_FORCE") - 1);
+	bool forced = false;
+
+	if (value != NULL) {
+		forced = ZSTR_LEN(value) > 0 && strcmp(ZSTR_VAL(value), "0") != 0;
+		zend_string_release(value);
+	}
+
+	return forced;
+}
+
+static bool terminal_wt_session_is_set(void)
+{
+	zend_string *value = php_getenv("WT_SESSION", sizeof("WT_SESSION") - 1);
+	bool set = value != NULL;
+
+	if (value != NULL) {
+		zend_string_release(value);
+	}
+
+	return set;
+}
+
 static bool terminal_stream_supports_ansi(terminal_native_stream handle)
 {
 	DWORD mode;
@@ -380,11 +405,19 @@ static bool terminal_stream_supports_ansi(terminal_native_stream handle)
 		return false;
 	}
 
+	if (terminal_clicolor_force_is_set()) {
+		return true;
+	}
+
 	if (!GetConsoleMode(handle, &mode)) {
 		return false;
 	}
 
 	if ((mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0) {
+		return true;
+	}
+
+	if (terminal_wt_session_is_set()) {
 		return true;
 	}
 
@@ -968,13 +1001,15 @@ static const char *terminal_getenv_nonempty(const char *name)
  * ANSI capability detection order on Unix:
  * 1. NO_COLOR set in the environment disables ANSI output.
  *    Spec: https://no-color.org
- * 2. A non-TTY stream without COLORTERM is not ANSI capable.
- * 3. COLORTERM=truecolor or COLORTERM=24bit is ANSI capable.
- * 4. TERM unset or TERM=dumb is not ANSI capable.
- * 5. Known TERM_PROGRAM values are ANSI capable.
- * 6. TERM containing 256color or color is ANSI capable.
- * 7. Known color-capable TERM values are ANSI capable.
- * 8. Fall back to isatty(fd).
+ * 2. CLICOLOR_FORCE set in the environment to a non-zero value forces ANSI output.
+ *    Spec: https://bixense.com/clicolors
+ * 3. A non-TTY stream without COLORTERM is not ANSI capable.
+ * 4. COLORTERM=truecolor or COLORTERM=24bit is ANSI capable.
+ * 5. TERM unset or TERM=dumb is not ANSI capable.
+ * 6. Known TERM_PROGRAM values are ANSI capable.
+ * 7. TERM containing 256color or color is ANSI capable.
+ * 8. Known color-capable TERM values are ANSI capable.
+ * 9. Fall back to isatty(fd).
  */
 static bool terminal_stream_supports_ansi(terminal_native_stream fd)
 {
@@ -982,6 +1017,7 @@ static bool terminal_stream_supports_ansi(terminal_native_stream fd)
 	const char *colorterm;
 	const char *term;
 	const char *term_program;
+	const char *clicolor_force;
 
 	if (getenv("NO_COLOR") != NULL) {
 		return false;
@@ -989,6 +1025,12 @@ static bool terminal_stream_supports_ansi(terminal_native_stream fd)
 	if (!terminal_native_stream_is_valid(fd)) {
 		return false;
 	}
+
+	clicolor_force = terminal_getenv_nonempty("CLICOLOR_FORCE");
+	if (clicolor_force != NULL && strcmp(clicolor_force, "0") != 0) {
+		return true;
+	}
+
 	is_tty = isatty(fd) == 1;
 
 	colorterm = terminal_getenv_nonempty("COLORTERM");
@@ -1008,10 +1050,13 @@ static bool terminal_stream_supports_ansi(terminal_native_stream fd)
 	term_program = terminal_getenv_nonempty("TERM_PROGRAM");
 	if (term_program != NULL
 		&& (strcmp(term_program, "iTerm.app") == 0
+			|| strcmp(term_program, "Apple_Terminal") == 0
 			|| strcmp(term_program, "Hyper") == 0
 			|| strcmp(term_program, "WezTerm") == 0
 			|| strcmp(term_program, "vscode") == 0
-			|| strcmp(term_program, "Tabby") == 0)) {
+			|| strcmp(term_program, "Tabby") == 0
+			|| strcmp(term_program, "ghostty") == 0
+			|| strcmp(term_program, "warp") == 0)) {
 		return true;
 	}
 
@@ -1019,12 +1064,16 @@ static bool terminal_stream_supports_ansi(terminal_native_stream fd)
 		return true;
 	}
 
-	if (strcmp(term, "xterm") == 0
-		|| strcmp(term, "rxvt") == 0
-		|| strcmp(term, "screen") == 0
-		|| strcmp(term, "tmux") == 0
+	if (strncmp(term, "xterm", 5) == 0
+		|| strncmp(term, "screen", 6) == 0
+		|| strncmp(term, "tmux", 4) == 0
+		|| strncmp(term, "rxvt", 4) == 0
 		|| strcmp(term, "alacritty") == 0
-		|| strcmp(term, "kitty") == 0) {
+		|| strcmp(term, "kitty") == 0
+		|| strcmp(term, "linux") == 0
+		|| strcmp(term, "vt100") == 0
+		|| strcmp(term, "vt220") == 0
+		|| strcmp(term, "ansi") == 0) {
 		return true;
 	}
 
@@ -1377,6 +1426,32 @@ static zend_string *terminal_key_from_csi_sequence(const unsigned char *sequence
 					return terminal_key_string("f12");
 			}
 		}
+		break;
+		case 'Z':
+			if (sequence_len == 1) {
+				return terminal_key_string("tab");
+			}
+			break;
+		case 'P':
+			if (sequence_len == 1) {
+				return terminal_key_string("f1");
+			}
+			break;
+		case 'Q':
+			if (sequence_len == 1) {
+				return terminal_key_string("f2");
+			}
+			break;
+		case 'R':
+			if (sequence_len == 1) {
+				return terminal_key_string("f3");
+			}
+			break;
+		case 'S':
+			if (sequence_len == 1) {
+				return terminal_key_string("f4");
+			}
+			break;
 	}
 
 	return terminal_key_string("escape");

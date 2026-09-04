@@ -1,0 +1,94 @@
+--TEST--
+Terminal\Terminal::supportsAnsi recognizes modern terminal emulators and extended TERMs
+--EXTENSIONS--
+terminal
+--SKIPIF--
+<?php
+if (PHP_OS_FAMILY === 'Windows') {
+    die("skip pseudo terminal test is POSIX only\n");
+}
+
+if (!function_exists('proc_open')) {
+    die("skip proc_open is unavailable\n");
+}
+
+$descriptors = [
+    0 => ['pty'],
+    1 => ['pipe', 'w'],
+    2 => ['pipe', 'w'],
+];
+
+$process = @proc_open(escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg('exit(0);'), $descriptors, $pipes);
+if (!is_resource($process)) {
+    die("skip pseudo terminal is unavailable\n");
+}
+
+foreach ($pipes as $pipe) {
+    fclose($pipe);
+}
+
+proc_close($process);
+?>
+--FILE--
+<?php
+function supports_ansi_with_env(array $env): string
+{
+    $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
+    $code = <<<'PHP'
+foreach (['TERM', 'COLORTERM', 'TERM_PROGRAM', 'NO_COLOR', 'CLICOLOR_FORCE'] as $name) {
+    putenv($name);
+}
+foreach (%s as $name => $value) {
+    putenv($name . '=' . $value);
+}
+var_dump(Terminal\Terminal::supportsAnsi(Terminal\Stream::Stdin));
+PHP;
+    $code = sprintf($code, var_export($env, true));
+    $command = escapeshellarg(PHP_BINARY) . ' -n -d extension=' . escapeshellarg($extension) . ' -r ' . escapeshellarg($code);
+    $descriptors = [
+        0 => ['pty'],
+        1 => ['pipe', 'w'],
+        2 => ['pipe', 'w'],
+    ];
+
+    $process = proc_open($command, $descriptors, $pipes);
+    if (!is_resource($process)) {
+        return 'proc_open failed';
+    }
+
+    $output = stream_get_contents($pipes[1]);
+    $error = stream_get_contents($pipes[2]);
+
+    foreach ($pipes as $pipe) {
+        fclose($pipe);
+    }
+
+    $status = proc_close($process);
+    if ($status !== 0 || $error !== '') {
+        return $output . $error;
+    }
+
+    return $output;
+}
+
+// Modern TERM_PROGRAMs on a TTY
+echo supports_ansi_with_env(['TERM' => 'xterm', 'TERM_PROGRAM' => 'Apple_Terminal']);
+echo supports_ansi_with_env(['TERM' => 'xterm', 'TERM_PROGRAM' => 'ghostty']);
+echo supports_ansi_with_env(['TERM' => 'xterm', 'TERM_PROGRAM' => 'warp']);
+
+// Extended TERM names on a TTY
+echo supports_ansi_with_env(['TERM' => 'xterm-ghostty']);
+echo supports_ansi_with_env(['TERM' => 'xterm-kitty']);
+echo supports_ansi_with_env(['TERM' => 'linux']);
+echo supports_ansi_with_env(['TERM' => 'vt100']);
+echo supports_ansi_with_env(['TERM' => 'vt220']);
+?>
+--EXPECT--
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)
