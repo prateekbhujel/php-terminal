@@ -77,7 +77,14 @@ The core-oriented API is namespaced and uses enums for values with a fixed set o
 - `Terminal\Terminal::isTty(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
 - `Terminal\Terminal::supportsAnsi(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
 - `Terminal\Terminal::enableAnsi(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
+- `Terminal\Terminal::getColorDepth(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): Terminal\ColorDepth`
+- `Terminal\Terminal::supportsColor(Terminal\ColorDepth $depth = Terminal\ColorDepth::Standard, Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
+- `Terminal\Terminal::supportsTrueColor(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
 - `Terminal\Terminal::getSize(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): array{cols:int, rows:int}|false`
+- `Terminal\Terminal::getWidth(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): int|false`
+- `Terminal\Terminal::getHeight(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): int|false`
+- `Terminal\Terminal::setTitle(string $title, Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
+- `Terminal\Terminal::beep(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
 - `Terminal\Terminal::write(string $data, Terminal\Stream|resource $stream = Terminal\Stream::Stdout): int|false`
 - `Terminal\Terminal::enableRawMode(Terminal\Stream|resource $stream = Terminal\Stream::Stdin): Terminal\ModeToken|false`
 - `Terminal\Terminal::restoreMode(Terminal\ModeToken $mode): bool`
@@ -88,6 +95,7 @@ Enums:
 
 - `Terminal\Backend`: `Posix`, `Windows`
 - `Terminal\Stream`: `Stdin`, `Stdout`, `Stderr`
+- `Terminal\ColorDepth`: `None` (0), `Standard` (4-bit / 16-color), `Extended` (8-bit / 256-color), `TrueColor` (24-bit direct color)
 - `Terminal\Key`: `Up`, `Down`, `Left`, `Right`, `Enter`, `Backspace`, `Escape`, `Tab`, `Home`, `End`, `Delete`, `PageUp`, `PageDown`, `Resize`, `F1` through `F12`
 
 `Terminal\Terminal::supportsAnsi()` reports whether ANSI output is available for a stream. On Windows, it probes VT support without leaving the stream mode changed.

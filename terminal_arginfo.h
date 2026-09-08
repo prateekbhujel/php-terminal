@@ -1,5 +1,5 @@
-/* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 2fb950155c5a708276c397a66ee24752e8c8feda */
+/* This is a generated file, edit terminal.stub.php instead.
+ * Stub hash: d75a53b773ba30ee34586d6fbffe56a8f5ddaf18 */
 
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Terminal_ModeToken___construct, 0, 0, 0)
 ZEND_END_ARG_INFO()
@@ -18,6 +18,30 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_getSize, 0, 0, MAY_BE_ARRAY|MAY_BE_FALSE)
 	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(0, stream, "Terminal\\Stream::Stdout")
 ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_getWidth, 0, 0, MAY_BE_LONG|MAY_BE_FALSE)
+	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(0, stream, "Terminal\\Stream::Stdout")
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_Terminal_Terminal_getHeight arginfo_class_Terminal_Terminal_getWidth
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Terminal_Terminal_getColorDepth, 0, 0, Terminal\\ColorDepth, 0)
+	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(0, stream, "Terminal\\Stream::Stdout")
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Terminal_Terminal_supportsColor, 0, 0, _IS_BOOL, 0)
+	ZEND_ARG_OBJ_INFO_WITH_DEFAULT_VALUE(0, depth, Terminal\\ColorDepth, 0, "Terminal\\ColorDepth::Standard")
+	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(0, stream, "Terminal\\Stream::Stdout")
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_Terminal_Terminal_supportsTrueColor arginfo_class_Terminal_Terminal_isTty
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Terminal_Terminal_setTitle, 0, 1, _IS_BOOL, 0)
+	ZEND_ARG_TYPE_INFO(0, title, IS_STRING, 0)
+	ZEND_ARG_INFO_WITH_DEFAULT_VALUE(0, stream, "Terminal\\Stream::Stdout")
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_Terminal_Terminal_beep arginfo_class_Terminal_Terminal_isTty
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_write, 0, 1, MAY_BE_LONG|MAY_BE_FALSE)
 	ZEND_ARG_TYPE_INFO(0, data, IS_STRING, 0)
@@ -47,6 +71,13 @@ ZEND_METHOD(Terminal_Terminal, isTty);
 ZEND_METHOD(Terminal_Terminal, supportsAnsi);
 ZEND_METHOD(Terminal_Terminal, enableAnsi);
 ZEND_METHOD(Terminal_Terminal, getSize);
+ZEND_METHOD(Terminal_Terminal, getWidth);
+ZEND_METHOD(Terminal_Terminal, getHeight);
+ZEND_METHOD(Terminal_Terminal, getColorDepth);
+ZEND_METHOD(Terminal_Terminal, supportsColor);
+ZEND_METHOD(Terminal_Terminal, supportsTrueColor);
+ZEND_METHOD(Terminal_Terminal, setTitle);
+ZEND_METHOD(Terminal_Terminal, beep);
 ZEND_METHOD(Terminal_Terminal, write);
 ZEND_METHOD(Terminal_Terminal, enableRawMode);
 ZEND_METHOD(Terminal_Terminal, restoreMode);
@@ -64,6 +95,13 @@ static const zend_function_entry class_Terminal_Terminal_methods[] = {
 	ZEND_ME(Terminal_Terminal, supportsAnsi, arginfo_class_Terminal_Terminal_supportsAnsi, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_ME(Terminal_Terminal, enableAnsi, arginfo_class_Terminal_Terminal_enableAnsi, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_ME(Terminal_Terminal, getSize, arginfo_class_Terminal_Terminal_getSize, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Terminal_Terminal, getWidth, arginfo_class_Terminal_Terminal_getWidth, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Terminal_Terminal, getHeight, arginfo_class_Terminal_Terminal_getHeight, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Terminal_Terminal, getColorDepth, arginfo_class_Terminal_Terminal_getColorDepth, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Terminal_Terminal, supportsColor, arginfo_class_Terminal_Terminal_supportsColor, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Terminal_Terminal, supportsTrueColor, arginfo_class_Terminal_Terminal_supportsTrueColor, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Terminal_Terminal, setTitle, arginfo_class_Terminal_Terminal_setTitle, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Terminal_Terminal, beep, arginfo_class_Terminal_Terminal_beep, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_ME(Terminal_Terminal, write, arginfo_class_Terminal_Terminal_write, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_ME(Terminal_Terminal, enableRawMode, arginfo_class_Terminal_Terminal_enableRawMode, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_ME(Terminal_Terminal, restoreMode, arginfo_class_Terminal_Terminal_restoreMode, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
@@ -104,6 +142,29 @@ static zend_class_entry *register_class_Terminal_Stream(void)
 	zval enum_case_Stderr_value;
 	ZVAL_LONG(&enum_case_Stderr_value, 2);
 	zend_enum_add_case_cstr(class_entry, "Stderr", &enum_case_Stderr_value);
+
+	return class_entry;
+}
+
+static zend_class_entry *register_class_Terminal_ColorDepth(void)
+{
+	zend_class_entry *class_entry = zend_register_internal_enum("Terminal\\ColorDepth", IS_LONG, NULL);
+
+	zval enum_case_None_value;
+	ZVAL_LONG(&enum_case_None_value, 0);
+	zend_enum_add_case_cstr(class_entry, "None", &enum_case_None_value);
+
+	zval enum_case_Standard_value;
+	ZVAL_LONG(&enum_case_Standard_value, 4);
+	zend_enum_add_case_cstr(class_entry, "Standard", &enum_case_Standard_value);
+
+	zval enum_case_Extended_value;
+	ZVAL_LONG(&enum_case_Extended_value, 8);
+	zend_enum_add_case_cstr(class_entry, "Extended", &enum_case_Extended_value);
+
+	zval enum_case_TrueColor_value;
+	ZVAL_LONG(&enum_case_TrueColor_value, 24);
+	zend_enum_add_case_cstr(class_entry, "TrueColor", &enum_case_TrueColor_value);
 
 	return class_entry;
 }
@@ -250,8 +311,12 @@ static zend_class_entry *register_class_Terminal_ModeToken(void)
 	zend_class_entry ce, *class_entry;
 
 	INIT_NS_CLASS_ENTRY(ce, "Terminal", "ModeToken", class_Terminal_ModeToken_methods);
+#if PHP_VERSION_ID >= 80400
+	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL);
+#else
 	class_entry = zend_register_internal_class_ex(&ce, NULL);
 	class_entry->ce_flags |= ZEND_ACC_FINAL;
+#endif
 
 	return class_entry;
 }
@@ -261,8 +326,12 @@ static zend_class_entry *register_class_Terminal_Terminal(void)
 	zend_class_entry ce, *class_entry;
 
 	INIT_NS_CLASS_ENTRY(ce, "Terminal", "Terminal", class_Terminal_Terminal_methods);
+#if PHP_VERSION_ID >= 80400
+	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL);
+#else
 	class_entry = zend_register_internal_class_ex(&ce, NULL);
 	class_entry->ce_flags |= ZEND_ACC_FINAL;
+#endif
 
 	return class_entry;
 }
