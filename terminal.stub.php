@@ -19,6 +19,14 @@ enum Stream: int
     case Stderr = 2;
 }
 
+enum ColorDepth: int
+{
+    case None = 0;
+    case Standard = 4;
+    case Extended = 8;
+    case TrueColor = 24;
+}
+
 enum Key: string
 {
     case Up = 'up';
@@ -69,6 +77,27 @@ final class Terminal
 
     /** @param Stream|resource $stream */
     public static function getSize($stream = Stream::Stdout): array|false {}
+
+    /** @param Stream|resource $stream */
+    public static function getWidth($stream = Stream::Stdout): int|false {}
+
+    /** @param Stream|resource $stream */
+    public static function getHeight($stream = Stream::Stdout): int|false {}
+
+    /** @param Stream|resource $stream */
+    public static function getColorDepth($stream = Stream::Stdout): ColorDepth {}
+
+    /** @param Stream|resource $stream */
+    public static function supportsColor(ColorDepth $depth = ColorDepth::Standard, $stream = Stream::Stdout): bool {}
+
+    /** @param Stream|resource $stream */
+    public static function supportsTrueColor($stream = Stream::Stdout): bool {}
+
+    /** @param Stream|resource $stream */
+    public static function setTitle(string $title, $stream = Stream::Stdout): bool {}
+
+    /** @param Stream|resource $stream */
+    public static function beep($stream = Stream::Stdout): bool {}
 
     /** @param Stream|resource $stream */
     public static function write(string $data, $stream = Stream::Stdout): int|false {}

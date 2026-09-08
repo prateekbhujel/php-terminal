@@ -1,7 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 - 2026-09-08
 
+- Added `Terminal\Terminal::getWidth()` and `Terminal\Terminal::getHeight()` convenience dimension helpers.
+- Added `Terminal\ColorDepth` backed enum (`None = 0`, `Standard = 4`, `Extended = 8`, `TrueColor = 24`).
+- Added `Terminal\Terminal::getColorDepth()` with cross-platform detection for 24-bit TrueColor, 256-color extended, and standard 16-color ANSI across `NO_COLOR`, `CLICOLOR_FORCE`, `COLORTERM`, modern terminal emulators (Ghostty, Kitty, WezTerm, iTerm, Hyper, VS Code, Tabby, Warp, Windows Terminal `WT_SESSION`, ConEmu), and extended `TERM` flags.
+- Added `Terminal\Terminal::supportsColor()` and `Terminal\Terminal::supportsTrueColor()`.
+- Added `Terminal\Terminal::setTitle()` to set the terminal window/tab title, with control character sanitization to prevent ANSI/OSC escape injection.
+- Added `Terminal\Terminal::beep()` to emit terminal bell alerts.
 - Added Shift+Tab (`\e[Z` / BackTab) normalization to `Terminal\Key::Tab` on POSIX, matching Windows behavior.
 - Added CSI F1–F4 (`\e[P`, `\e[Q`, `\e[R`, `\e[S`) key normalization.
 - Added `CLICOLOR_FORCE` standard support on Unix and Windows, enabling ANSI output for redirected/CI streams while preserving `NO_COLOR` precedence.

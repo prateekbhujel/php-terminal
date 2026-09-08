@@ -63,6 +63,7 @@ typedef struct _terminal_mode_token_object {
 
 static zend_class_entry *terminal_backend_ce;
 static zend_class_entry *terminal_stream_ce;
+static zend_class_entry *terminal_color_depth_ce;
 static zend_class_entry *terminal_key_ce;
 static zend_class_entry *terminal_mode_token_ce;
 static zend_object_handlers terminal_mode_token_handlers;
@@ -144,6 +145,25 @@ static zend_long terminal_stream_from_enum(zval *stream)
 static void terminal_set_enum_case(zval *return_value, zend_class_entry *ce, const char *case_name)
 {
 	RETVAL_OBJ_COPY(zend_enum_get_case_cstr(ce, case_name));
+}
+
+static void terminal_set_color_depth_case(zval *return_value, zend_long depth)
+{
+	switch (depth) {
+		case 24:
+			terminal_set_enum_case(return_value, terminal_color_depth_ce, "TrueColor");
+			break;
+		case 8:
+			terminal_set_enum_case(return_value, terminal_color_depth_ce, "Extended");
+			break;
+		case 4:
+			terminal_set_enum_case(return_value, terminal_color_depth_ce, "Standard");
+			break;
+		case 0:
+		default:
+			terminal_set_enum_case(return_value, terminal_color_depth_ce, "None");
+			break;
+	}
 }
 
 static zend_object *terminal_key_enum_from_string(zend_string *key)
@@ -450,6 +470,93 @@ static bool terminal_enable_stream_ansi(terminal_native_stream handle)
 	}
 
 	return SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+}
+
+static zend_long terminal_stream_color_depth(terminal_native_stream handle)
+{
+	DWORD mode;
+	zend_string *env_val;
+
+	if (!terminal_stream_supports_ansi(handle)) {
+		return 0;
+	}
+
+	if (terminal_wt_session_is_set()) {
+		return 24;
+	}
+
+	env_val = php_getenv("ConEmuANSI", sizeof("ConEmuANSI") - 1);
+	if (env_val != NULL) {
+		bool is_on = zend_string_equals_literal_ci(env_val, "ON");
+		zend_string_release(env_val);
+		if (is_on) {
+			return 24;
+		}
+	}
+
+	env_val = php_getenv("COLORTERM", sizeof("COLORTERM") - 1);
+	if (env_val != NULL) {
+		bool is_truecolor = zend_string_equals_literal_ci(env_val, "truecolor")
+			|| zend_string_equals_literal_ci(env_val, "24bit");
+		zend_string_release(env_val);
+		if (is_truecolor) {
+			return 24;
+		}
+	}
+
+	env_val = php_getenv("TERM_PROGRAM", sizeof("TERM_PROGRAM") - 1);
+	if (env_val != NULL) {
+		bool is_modern = zend_string_equals_literal_ci(env_val, "iTerm.app")
+			|| zend_string_equals_literal_ci(env_val, "Apple_Terminal")
+			|| zend_string_equals_literal_ci(env_val, "Hyper")
+			|| zend_string_equals_literal_ci(env_val, "WezTerm")
+			|| zend_string_equals_literal_ci(env_val, "vscode")
+			|| zend_string_equals_literal_ci(env_val, "Tabby")
+			|| zend_string_equals_literal_ci(env_val, "ghostty")
+			|| zend_string_equals_literal_ci(env_val, "warp");
+		zend_string_release(env_val);
+		if (is_modern) {
+			return 24;
+		}
+	}
+
+	env_val = php_getenv("TERM", sizeof("TERM") - 1);
+	if (env_val != NULL) {
+		const char *term = ZSTR_VAL(env_val);
+		size_t term_len = ZSTR_LEN(env_val);
+		zend_long depth = 0;
+
+		if ((term_len >= 7 && strcmp(term + term_len - 7, "-direct") == 0)
+			|| (term_len >= 5 && strcmp(term + term_len - 5, "24bit") == 0)
+			|| strcmp(term, "alacritty") == 0
+			|| strcmp(term, "kitty") == 0) {
+			depth = 24;
+		} else if (strstr(term, "256color") != NULL
+			|| strstr(term, "256-color") != NULL
+			|| strstr(term, "256") != NULL
+			|| strncmp(term, "xterm", 5) == 0
+			|| strncmp(term, "screen", 6) == 0
+			|| strncmp(term, "tmux", 4) == 0
+			|| strncmp(term, "rxvt", 4) == 0) {
+			depth = 8;
+		} else if (strcmp(term, "vt100") == 0
+			|| strcmp(term, "vt220") == 0
+			|| strcmp(term, "ansi") == 0
+			|| strcmp(term, "linux") == 0) {
+			depth = 4;
+		}
+
+		zend_string_release(env_val);
+		if (depth > 0) {
+			return depth;
+		}
+	}
+
+	if (GetConsoleMode(handle, &mode) && (mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0) {
+		return 24;
+	}
+
+	return 8;
 }
 
 static bool terminal_stream_size(terminal_native_stream handle, zend_long *columns, zend_long *rows)
@@ -1083,6 +1190,61 @@ static bool terminal_stream_supports_ansi(terminal_native_stream fd)
 static bool terminal_enable_stream_ansi(terminal_native_stream stream)
 {
 	return terminal_stream_supports_ansi(stream);
+}
+
+static zend_long terminal_stream_color_depth(terminal_native_stream fd)
+{
+	const char *colorterm;
+	const char *term;
+	const char *term_program;
+
+	if (!terminal_stream_supports_ansi(fd)) {
+		return 0;
+	}
+
+	colorterm = terminal_getenv_nonempty("COLORTERM");
+	if (colorterm != NULL
+		&& (strcmp(colorterm, "truecolor") == 0 || strcmp(colorterm, "24bit") == 0)) {
+		return 24;
+	}
+
+	term = terminal_getenv_nonempty("TERM");
+	if (term != NULL) {
+		size_t term_len = strlen(term);
+		if ((term_len >= 7 && strcmp(term + term_len - 7, "-direct") == 0)
+			|| (term_len >= 5 && strcmp(term + term_len - 5, "24bit") == 0)
+			|| strcmp(term, "alacritty") == 0
+			|| strcmp(term, "kitty") == 0) {
+			return 24;
+		}
+	}
+
+	term_program = terminal_getenv_nonempty("TERM_PROGRAM");
+	if (term_program != NULL
+		&& (strcmp(term_program, "iTerm.app") == 0
+			|| strcmp(term_program, "Apple_Terminal") == 0
+			|| strcmp(term_program, "Hyper") == 0
+			|| strcmp(term_program, "WezTerm") == 0
+			|| strcmp(term_program, "vscode") == 0
+			|| strcmp(term_program, "Tabby") == 0
+			|| strcmp(term_program, "ghostty") == 0
+			|| strcmp(term_program, "warp") == 0)) {
+		return 24;
+	}
+
+	if (term != NULL) {
+		if (strstr(term, "256color") != NULL
+			|| strstr(term, "256-color") != NULL
+			|| strstr(term, "256") != NULL
+			|| strncmp(term, "xterm", 5) == 0
+			|| strncmp(term, "screen", 6) == 0
+			|| strncmp(term, "tmux", 4) == 0
+			|| strncmp(term, "rxvt", 4) == 0) {
+			return 8;
+		}
+	}
+
+	return 4;
 }
 
 static bool terminal_stream_size(terminal_native_stream fd, zend_long *columns, zend_long *rows)
@@ -1928,6 +2090,71 @@ static void terminal_validate_input_stream_or_throw(zend_long stream, uint32_t a
 	}
 }
 
+static bool terminal_stream_set_title(const terminal_stream_target *stream, const char *title, size_t title_len)
+{
+	size_t i;
+	char *buf;
+	size_t buf_len;
+	zend_long written;
+	bool success = false;
+
+	/* Reject control characters to prevent ANSI/OSC escape injection */
+	for (i = 0; i < title_len; i++) {
+		unsigned char c = (unsigned char) title[i];
+		if (c == '\r' || c == '\n' || c == '\033' || c == '\x07') {
+			return false;
+		}
+	}
+
+#ifdef PHP_WIN32
+	if (stream->is_enum && terminal_stream_is_tty(stream->native_stream)) {
+		SetConsoleTitleA(title);
+		return true;
+	}
+#endif
+
+	if (!terminal_stream_supports_ansi(stream->native_stream)
+		&& !terminal_stream_is_tty(stream->native_stream)) {
+		return false;
+	}
+
+	buf_len = title_len + 6;
+	buf = (char *) emalloc(buf_len);
+	memcpy(buf, "\033]0;", 4);
+	memcpy(buf + 4, title, title_len);
+	buf[4 + title_len] = '\x07';
+	buf[5 + title_len] = '\0';
+
+	if (stream->php_stream != NULL) {
+		success = terminal_php_stream_write_all(stream->php_stream, buf, 5 + title_len, &written);
+	} else {
+		success = terminal_stream_write(stream->native_stream, buf, 5 + title_len, &written);
+	}
+
+	efree(buf);
+	return success;
+}
+
+static bool terminal_stream_beep(const terminal_stream_target *stream)
+{
+	zend_long written;
+
+	if (!terminal_stream_is_tty(stream->native_stream)) {
+		return false;
+	}
+
+#ifdef PHP_WIN32
+	if (stream->is_enum) {
+		MessageBeep(0xFFFFFFFF);
+	}
+#endif
+
+	if (stream->php_stream != NULL) {
+		return terminal_php_stream_write_all(stream->php_stream, "\x07", 1, &written);
+	}
+	return terminal_stream_write(stream->native_stream, "\x07", 1, &written);
+}
+
 ZEND_METHOD(Terminal_ModeToken, __construct)
 {
 	(void) return_value;
@@ -2028,6 +2255,174 @@ ZEND_METHOD(Terminal_Terminal, getSize)
 	array_init(return_value);
 	add_assoc_long(return_value, "cols", columns);
 	add_assoc_long(return_value, "rows", rows);
+}
+
+ZEND_METHOD(Terminal_Terminal, getWidth)
+{
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
+	zend_long columns;
+	zend_long rows;
+
+	ZEND_PARSE_PARAMETERS_START(0, 1)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL(stream_arg)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 1, &stream)) {
+		RETURN_THROWS();
+	}
+
+	if (!terminal_stream_size(stream.native_stream, &columns, &rows)
+		&& !terminal_size_from_environment(&columns, &rows)) {
+		RETURN_FALSE;
+	}
+
+	RETURN_LONG(columns);
+}
+
+ZEND_METHOD(Terminal_Terminal, getHeight)
+{
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
+	zend_long columns;
+	zend_long rows;
+
+	ZEND_PARSE_PARAMETERS_START(0, 1)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL(stream_arg)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 1, &stream)) {
+		RETURN_THROWS();
+	}
+
+	if (!terminal_stream_size(stream.native_stream, &columns, &rows)
+		&& !terminal_size_from_environment(&columns, &rows)) {
+		RETURN_FALSE;
+	}
+
+	RETURN_LONG(rows);
+}
+
+ZEND_METHOD(Terminal_Terminal, getColorDepth)
+{
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
+	zend_long depth;
+
+	ZEND_PARSE_PARAMETERS_START(0, 1)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL(stream_arg)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 1, &stream)) {
+		RETURN_THROWS();
+	}
+
+	depth = terminal_stream_color_depth(stream.native_stream);
+	terminal_set_color_depth_case(return_value, depth);
+}
+
+ZEND_METHOD(Terminal_Terminal, supportsColor)
+{
+	zend_object *depth_arg = NULL;
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
+	zend_long requested_depth = 4; /* Default: Standard 16 colors */
+	zend_long actual_depth;
+
+	ZEND_PARSE_PARAMETERS_START(0, 2)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_OBJ_OF_CLASS(depth_arg, terminal_color_depth_ce)
+		Z_PARAM_ZVAL(stream_arg)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 2, &stream)) {
+		RETURN_THROWS();
+	}
+
+	if (depth_arg != NULL) {
+		zval *case_val = zend_enum_fetch_case_value(depth_arg);
+		if (case_val != NULL && Z_TYPE_P(case_val) == IS_LONG) {
+			requested_depth = Z_LVAL_P(case_val);
+		}
+	}
+
+	actual_depth = terminal_stream_color_depth(stream.native_stream);
+
+	if (requested_depth == 0) {
+		RETURN_BOOL(actual_depth == 0);
+	}
+
+	RETURN_BOOL(actual_depth >= requested_depth);
+}
+
+ZEND_METHOD(Terminal_Terminal, supportsTrueColor)
+{
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
+
+	ZEND_PARSE_PARAMETERS_START(0, 1)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL(stream_arg)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 1, &stream)) {
+		RETURN_THROWS();
+	}
+
+	RETURN_BOOL(terminal_stream_color_depth(stream.native_stream) == 24);
+}
+
+ZEND_METHOD(Terminal_Terminal, setTitle)
+{
+	zend_string *title;
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
+
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_STR(title)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL(stream_arg)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 2, &stream)) {
+		RETURN_THROWS();
+	}
+
+	if (stream.is_enum) {
+		terminal_validate_output_stream_or_throw(stream.enum_id, 2);
+	}
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+
+	RETURN_BOOL(terminal_stream_set_title(&stream, ZSTR_VAL(title), ZSTR_LEN(title)));
+}
+
+ZEND_METHOD(Terminal_Terminal, beep)
+{
+	zval *stream_arg = NULL;
+	terminal_stream_target stream;
+
+	ZEND_PARSE_PARAMETERS_START(0, 1)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL(stream_arg)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 1, &stream)) {
+		RETURN_THROWS();
+	}
+
+	if (stream.is_enum) {
+		terminal_validate_output_stream_or_throw(stream.enum_id, 1);
+	}
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+
+	RETURN_BOOL(terminal_stream_beep(&stream));
 }
 
 ZEND_METHOD(Terminal_Terminal, write)
@@ -2210,6 +2605,7 @@ PHP_MINIT_FUNCTION(terminal)
 
 	terminal_backend_ce = register_class_Terminal_Backend();
 	terminal_stream_ce = register_class_Terminal_Stream();
+	terminal_color_depth_ce = register_class_Terminal_ColorDepth();
 	terminal_key_ce = register_class_Terminal_Key();
 	terminal_mode_token_ce = register_class_Terminal_ModeToken();
 	terminal_mode_token_ce->create_object = terminal_mode_token_create_object;
