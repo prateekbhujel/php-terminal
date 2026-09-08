@@ -475,6 +475,7 @@ static bool terminal_enable_stream_ansi(terminal_native_stream handle)
 static zend_long terminal_stream_color_depth(terminal_native_stream handle)
 {
 	DWORD mode;
+	zend_string *env_val;
 
 	if (!terminal_stream_supports_ansi(handle)) {
 		return 0;
@@ -484,26 +485,70 @@ static zend_long terminal_stream_color_depth(terminal_native_stream handle)
 		return 24;
 	}
 
-	{
-		zend_string *conemu = php_getenv("ConEmuANSI", sizeof("ConEmuANSI") - 1);
-		if (conemu != NULL) {
-			bool is_on = zend_string_equals_literal_ci(conemu, "ON");
-			zend_string_release(conemu);
-			if (is_on) {
-				return 24;
-			}
+	env_val = php_getenv("ConEmuANSI", sizeof("ConEmuANSI") - 1);
+	if (env_val != NULL) {
+		bool is_on = zend_string_equals_literal_ci(env_val, "ON");
+		zend_string_release(env_val);
+		if (is_on) {
+			return 24;
 		}
 	}
 
-	{
-		zend_string *colorterm = php_getenv("COLORTERM", sizeof("COLORTERM") - 1);
-		if (colorterm != NULL) {
-			bool is_truecolor = zend_string_equals_literal_ci(colorterm, "truecolor")
-				|| zend_string_equals_literal_ci(colorterm, "24bit");
-			zend_string_release(colorterm);
-			if (is_truecolor) {
-				return 24;
-			}
+	env_val = php_getenv("COLORTERM", sizeof("COLORTERM") - 1);
+	if (env_val != NULL) {
+		bool is_truecolor = zend_string_equals_literal_ci(env_val, "truecolor")
+			|| zend_string_equals_literal_ci(env_val, "24bit");
+		zend_string_release(env_val);
+		if (is_truecolor) {
+			return 24;
+		}
+	}
+
+	env_val = php_getenv("TERM_PROGRAM", sizeof("TERM_PROGRAM") - 1);
+	if (env_val != NULL) {
+		bool is_modern = zend_string_equals_literal_ci(env_val, "iTerm.app")
+			|| zend_string_equals_literal_ci(env_val, "Apple_Terminal")
+			|| zend_string_equals_literal_ci(env_val, "Hyper")
+			|| zend_string_equals_literal_ci(env_val, "WezTerm")
+			|| zend_string_equals_literal_ci(env_val, "vscode")
+			|| zend_string_equals_literal_ci(env_val, "Tabby")
+			|| zend_string_equals_literal_ci(env_val, "ghostty")
+			|| zend_string_equals_literal_ci(env_val, "warp");
+		zend_string_release(env_val);
+		if (is_modern) {
+			return 24;
+		}
+	}
+
+	env_val = php_getenv("TERM", sizeof("TERM") - 1);
+	if (env_val != NULL) {
+		const char *term = ZSTR_VAL(env_val);
+		size_t term_len = ZSTR_LEN(env_val);
+		zend_long depth = 0;
+
+		if ((term_len >= 7 && strcmp(term + term_len - 7, "-direct") == 0)
+			|| (term_len >= 5 && strcmp(term + term_len - 5, "24bit") == 0)
+			|| strcmp(term, "alacritty") == 0
+			|| strcmp(term, "kitty") == 0) {
+			depth = 24;
+		} else if (strstr(term, "256color") != NULL
+			|| strstr(term, "256-color") != NULL
+			|| strstr(term, "256") != NULL
+			|| strncmp(term, "xterm", 5) == 0
+			|| strncmp(term, "screen", 6) == 0
+			|| strncmp(term, "tmux", 4) == 0
+			|| strncmp(term, "rxvt", 4) == 0) {
+			depth = 8;
+		} else if (strcmp(term, "vt100") == 0
+			|| strcmp(term, "vt220") == 0
+			|| strcmp(term, "ansi") == 0
+			|| strcmp(term, "linux") == 0) {
+			depth = 4;
+		}
+
+		zend_string_release(env_val);
+		if (depth > 0) {
+			return depth;
 		}
 	}
 
