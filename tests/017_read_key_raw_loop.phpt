@@ -50,7 +50,7 @@ echo "ready\n";
 for ($i = 0; $i < %d; $i++) {
     $key = Terminal\Terminal::readKey(2.0, 0.05);
     if ($key instanceof Terminal\Key) {
-        echo $key->name . ':' . $key->value . "\n";
+        echo $key->name . ':' . strtolower($key->name) . "\n";
     } else {
         var_dump($key);
     }

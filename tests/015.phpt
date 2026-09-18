@@ -42,7 +42,7 @@ function read_key_from_child(string $input, bool $sendResize = false): string
 echo "ready:" . getmypid() . "\n";
 $key = Terminal\Terminal::readKey(1.0, 0.05);
 if ($key instanceof Terminal\Key) {
-    echo $key->name . ':' . $key->value . "\n";
+    echo $key->name . ':' . strtolower($key->name) . "\n";
 } else {
     var_dump($key);
 }

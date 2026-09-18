@@ -40,7 +40,7 @@ $start = microtime(true);
 $key = Terminal\Terminal::readKey(1.0, 0.1);
 $elapsed = microtime(true) - $start;
 if ($key instanceof Terminal\Key) {
-    echo $key->name . ':' . $key->value . "\n";
+    echo $key->name . ':' . strtolower($key->name) . "\n";
 } else {
     var_dump($key);
 }

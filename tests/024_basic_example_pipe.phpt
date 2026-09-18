@@ -11,7 +11,7 @@ LINES=40
 include dirname(__DIR__) . '/examples/basic.php';
 ?>
 --EXPECTF--
-enum(Terminal\Backend::%s)
+enum(%sBackend::%s)
 bool(false)
 bool(false)
 bool(false)

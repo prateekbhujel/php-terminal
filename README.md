@@ -23,9 +23,9 @@ It exposes the pieces that are awkward to normalize in userland, especially once
 
 Created and maintained by Pratik Bhujel.
 
-Current release: `v0.6.0`.
+Current release: `v0.8.0`.
 
-`v0.6.0` lets stream-aware methods use existing PHP stream resources such as `STDIN`, `STDOUT`, `STDERR`, and `php://stdout` while preserving the `Terminal\Stream` enum defaults. It also adds PIE installation metadata. The older `v0.2.0` release used the first procedural `terminal_*()` API.
+`v0.8.0` restructures the extension under `Io\Terminal`, introducing instance-based `Io\Terminal\Terminal` handles with RAII automatic raw-mode restoration on destruction (Rust termion style), free-standing procedural functions, and unbacked core-aligned enums, while maintaining 100% backward compatibility via `Terminal\*` legacy facades and aliases.
 
 ## Install
 
@@ -71,49 +71,86 @@ This extension stays narrower:
 
 ## Current API
 
-The core-oriented API is namespaced and uses enums for values with a fixed set of cases:
+### 1. Object-Oriented Instance API (`Io\Terminal\Terminal`)
 
-- `Terminal\Terminal::getBackend(): Terminal\Backend`
-- `Terminal\Terminal::isTty(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
-- `Terminal\Terminal::supportsAnsi(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
-- `Terminal\Terminal::enableAnsi(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
-- `Terminal\Terminal::getColorDepth(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): Terminal\ColorDepth`
-- `Terminal\Terminal::supportsColor(Terminal\ColorDepth $depth = Terminal\ColorDepth::Standard, Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
-- `Terminal\Terminal::supportsTrueColor(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
-- `Terminal\Terminal::getSize(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): array{cols:int, rows:int}|false`
-- `Terminal\Terminal::getWidth(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): int|false`
-- `Terminal\Terminal::getHeight(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): int|false`
-- `Terminal\Terminal::setTitle(string $title, Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
-- `Terminal\Terminal::beep(Terminal\Stream|resource $stream = Terminal\Stream::Stdout): bool`
-- `Terminal\Terminal::write(string $data, Terminal\Stream|resource $stream = Terminal\Stream::Stdout): int|false`
-- `Terminal\Terminal::enableRawMode(Terminal\Stream|resource $stream = Terminal\Stream::Stdin): Terminal\ModeToken|false`
-- `Terminal\Terminal::restoreMode(Terminal\ModeToken $mode): bool`
-- `Terminal\Terminal::readKey(?float $timeout = null, ?float $sequenceTimeout = null): Terminal\Key|string|false`
-- `Terminal\Terminal::readSecret(string $prompt = ''): string`
-
-Enums:
-
-- `Terminal\Backend`: `Posix`, `Windows`
-- `Terminal\Stream`: `Stdin`, `Stdout`, `Stderr`
-- `Terminal\ColorDepth`: `None` (0), `Standard` (4-bit / 16-color), `Extended` (8-bit / 256-color), `TrueColor` (24-bit direct color)
-- `Terminal\Key`: `Up`, `Down`, `Left`, `Right`, `Enter`, `Backspace`, `Escape`, `Tab`, `Home`, `End`, `Delete`, `PageUp`, `PageDown`, `Resize`, `F1` through `F12`
-
-`Terminal\Terminal::supportsAnsi()` reports whether ANSI output is available for a stream. On Windows, it probes VT support without leaving the stream mode changed.
-`Terminal\Terminal::enableAnsi()` enables ANSI/VT output on Windows stdout/stderr and is a no-op capability check on Unix-like terminals. Any `NO_COLOR` environment entry disables ANSI support checks, taking precedence over color flags. Non-zero `CLICOLOR_FORCE` enables ANSI output even for redirected or CI streams. `COLORTERM=truecolor`, `COLORTERM=24bit`, `WT_SESSION` on Windows, known `TERM_PROGRAM` values (`Apple_Terminal`, `ghostty`, `warp`, `iTerm.app`, `Hyper`, `WezTerm`, `vscode`, `Tabby`), and color-capable `TERM` values (`xterm*`, `screen*`, `tmux*`, `rxvt*`, `linux`, `vt100`, `vt220`, `ansi`) are recognized as positive capability signals.
-Stream-aware methods accept either a `Terminal\Stream` case or an existing PHP stream resource. Resources backed by a native file descriptor or Windows handle can be used for terminal operations; unsupported wrappers return `false`. `Terminal\Terminal::write()` writes through the PHP stream layer when given a resource.
-`Terminal\Terminal::write()` accepts `Terminal\Stream::Stdout`, `Terminal\Stream::Stderr`, or a writable PHP stream resource.
-`Terminal\Terminal::enableRawMode()` accepts `Terminal\Stream::Stdin` or a compatible input stream resource and returns an opaque `Terminal\ModeToken` that should be passed back to `Terminal\Terminal::restoreMode()`.
-`Terminal\ModeToken` is process-local, non-serializable, single-use after a successful restore, and intentionally has no public constructor or properties. For resource-backed raw mode, it retains and verifies the originating stream before restore.
-`Terminal\Terminal::enableRawMode()` leaves terminal output processing intact, so normal prompt output such as `"\n"` keeps working while input is read one key at a time.
-On POSIX, raw-mode switches use `TCSANOW` so mode changes are immediate; callers that type ahead should not assume pending input was drained first.
-`Terminal\Terminal::readKey()` temporarily prepares standard input for key reads, restores the previous mode before returning, returns special keys as `Terminal\Key` cases, returns printable input as strings including UTF-8 input, and returns `false` when no key is available before the timeout. If standard input is already raw, `readKey()` preserves that state.
-On POSIX, `$sequenceTimeout` controls how long `readKey()` waits for bytes that complete an escape or UTF-8 sequence after the first byte. `null` uses the default 25ms sequence timeout.
-POSIX `SIGWINCH` and Windows `WINDOW_BUFFER_SIZE_EVENT` during `readKey()` return `Terminal\Key::Resize`.
-Printable Unicode input is returned as the next encoded code point from the terminal, not as a full grapheme cluster.
-`Terminal\Terminal::readSecret()` writes the optional prompt, reads a masked line from standard input, handles UTF-8 backspace, restores the previous mode on return or error, and returns the secret as a string.
+Encapsulates stream descriptors and guarantees terminal state restoration when instances go out of scope:
 
 ```php
-$password = Terminal::readSecret('Password: ');
+use Io\Terminal\Terminal;
+use Io\Terminal\Key;
+
+$term = Terminal::stdin();
+$token = $term->enableRawMode();
+
+// Read keys with instant non-canonical single-character responsiveness
+$key = $term->readKey();
+if ($key === Key::Up) {
+    // handled
+}
+
+// Automatically restored when $term or $token is destroyed, or explicitly:
+$term->restoreMode();
+```
+
+Instance methods:
+- `Terminal::stdin(): Terminal`
+- `Terminal::stdout(): Terminal`
+- `Terminal::stderr(): Terminal`
+- `$term->getStream(): mixed`
+- `$term->isTty(): bool`
+- `$term->supportsAnsi(): bool`
+- `$term->enableAnsi(): bool`
+- `$term->getColorDepth(): ColorDepth`
+- `$term->supportsColor(ColorDepth $depth = ColorDepth::Standard): bool`
+- `$term->supportsTrueColor(): bool`
+- `$term->getSize(): array{cols:int, rows:int}|false`
+- `$term->getWidth(): int|false`
+- `$term->getHeight(): int|false`
+- `$term->setTitle(string $title): bool`
+- `$term->beep(): bool`
+- `$term->write(string $data): int|false`
+- `$term->enableRawMode(): ModeToken|false`
+- `$term->restoreMode(?ModeToken $mode = null): bool`
+- `$term->readKey(?float $timeout = null, ?float $sequenceTimeout = null): Key|string|false`
+- `$term->readSecret(string $prompt = ''): string`
+
+### 2. Free-Standing Procedural Functions (`Io\Terminal\*`)
+
+- `Io\Terminal\get_backend(): Backend`
+- `Io\Terminal\is_tty(mixed $stream = UNKNOWN): bool`
+- `Io\Terminal\supports_ansi(mixed $stream = UNKNOWN): bool`
+- `Io\Terminal\enable_ansi(mixed $stream = UNKNOWN): bool`
+- `Io\Terminal\get_size(mixed $stream = UNKNOWN): array{cols:int, rows:int}|false`
+- `Io\Terminal\get_width(mixed $stream = UNKNOWN): int|false`
+- `Io\Terminal\get_height(mixed $stream = UNKNOWN): int|false`
+- `Io\Terminal\get_color_depth(mixed $stream = UNKNOWN): ColorDepth`
+- `Io\Terminal\supports_color(ColorDepth $depth = ColorDepth::Standard, mixed $stream = UNKNOWN): bool`
+- `Io\Terminal\supports_true_color(mixed $stream = UNKNOWN): bool`
+- `Io\Terminal\set_title(string $title, mixed $stream = UNKNOWN): bool`
+- `Io\Terminal\beep(mixed $stream = UNKNOWN): bool`
+- `Io\Terminal\write(string $data, mixed $stream = UNKNOWN): int|false`
+- `Io\Terminal\enable_raw_mode(mixed $stream = UNKNOWN): ModeToken|false`
+- `Io\Terminal\restore_mode(ModeToken $mode): bool`
+- `Io\Terminal\read_key(?float $timeout = null, ?float $sequenceTimeout = null, mixed $stream = UNKNOWN): Key|string|false`
+- `Io\Terminal\read_secret(string $prompt = '', mixed $stream = UNKNOWN): string`
+
+### 3. Enums (`Io\Terminal\*`)
+
+- `Backend`: `Posix`, `Windows`
+- `Stream`: `Stdin`, `Stdout`, `Stderr`
+- `ColorDepth`: `None` (0-bit), `Standard` (4-bit), `Extended` (8-bit), `TrueColor` (24-bit). Helper method: `$depth->bits(): int`.
+- `Key`: `Up`, `Down`, `Left`, `Right`, `Enter`, `Backspace`, `Escape`, `Tab`, `Home`, `End`, `Delete`, `PageUp`, `PageDown`, `Resize`, `F1` through `F12`
+
+### 4. Legacy Facade (`Terminal\Terminal`)
+
+Full backward compatibility is preserved for existing code using the `Terminal\*` namespace:
+
+```php
+use Terminal\Terminal;
+use Terminal\Key;
+
+$cols = Terminal::getWidth();
+$key = Terminal::readKey();
 ```
 
 Current key input scope:

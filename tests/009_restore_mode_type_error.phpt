@@ -11,4 +11,4 @@ try {
 }
 ?>
 --EXPECTF--
-Terminal\Terminal::restoreMode(): Argument #1 ($mode) must be of type Terminal\ModeToken, string given
+Terminal\Terminal::restoreMode(): Argument #1 ($mode) must be of type %sModeToken, string given

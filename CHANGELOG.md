@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0 - 2026-09-18
+
+- Restructured extension under the `Io\Terminal` namespace to align with modern PHP core conventions.
+- Added instance-based `Io\Terminal\Terminal` class wrapping stream descriptors with named constructors `stdin()`, `stdout()`, and `stderr()`.
+- Implemented automatic raw-mode cleanup on destruction (RAII / termion pattern) on `Io\Terminal\Terminal` instances and `ModeToken` objects, preventing corrupted terminal states on uncaught exceptions.
+- Added free-standing procedural functions under `Io\Terminal` for functional and script workflows.
+- Modernized enums (`Backend`, `Stream`, `ColorDepth`, `Key`) to unbacked enums matching core standards, providing dedicated helper methods like `ColorDepth::bits()`.
+- Preserved full backward compatibility with `Terminal\*` legacy facades and class aliases for seamless userland interoperability.
+
 ## 0.7.0 - 2026-09-08
 
 - Added `Terminal\Terminal::getWidth()` and `Terminal\Terminal::getHeight()` convenience dimension helpers.

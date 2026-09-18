@@ -7,11 +7,11 @@ terminal
 use Terminal\ColorDepth;
 use Terminal\Terminal;
 
-// Verify enum backing values
-var_dump(ColorDepth::None->value);
-var_dump(ColorDepth::Standard->value);
-var_dump(ColorDepth::Extended->value);
-var_dump(ColorDepth::TrueColor->value);
+// Verify enum bit depth helper
+var_dump(ColorDepth::None->bits());
+var_dump(ColorDepth::Standard->bits());
+var_dump(ColorDepth::Extended->bits());
+var_dump(ColorDepth::TrueColor->bits());
 
 // Reset environment
 putenv('NO_COLOR');

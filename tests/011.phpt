@@ -38,7 +38,7 @@ function read_key_from_child(string $input): string
 echo "ready\n";
 $key = Terminal\Terminal::readKey(1.0);
 if ($key instanceof Terminal\Key) {
-    echo $key->name . ':' . $key->value . "\n";
+    echo $key->name . ':' . strtolower($key->name) . "\n";
 } else {
     var_dump($key);
 }

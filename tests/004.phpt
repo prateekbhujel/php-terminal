@@ -26,6 +26,6 @@ var_dump($mode === false || Terminal::restoreMode($mode));
 ?>
 --EXPECTF--
 Terminal\Terminal::enableRawMode(): Argument #1 ($stream) must be Terminal\Stream::Stdin
-Terminal\Terminal::restoreMode(): Argument #1 ($mode) must be of type Terminal\ModeToken, string given
+Terminal\Terminal::restoreMode(): Argument #1 ($mode) must be of type %sModeToken, string given
 bool(true)
 bool(true)

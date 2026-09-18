@@ -43,7 +43,7 @@ function read_key_chunks_from_child(array $chunks, float $timeout, ?float $seque
 echo "ready\n";
 $key = Terminal\Terminal::readKey(%s, %s);
 if ($key instanceof Terminal\Key) {
-    echo $key->name . ':' . $key->value . "\n";
+    echo $key->name . ':' . strtolower($key->name) . "\n";
 } else {
     var_dump($key);
 }

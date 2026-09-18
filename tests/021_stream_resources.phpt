@@ -38,7 +38,7 @@ try {
     echo "closed stream rejected\n";
 }
 ?>
---EXPECT--
+--EXPECTF--
 bool(false)
 bool(false)
 bool(false)
@@ -52,5 +52,5 @@ array(2) {
 }
 bool(true)
 bool(false)
-Terminal\Terminal::isTty(): Argument #1 ($stream) must be of type Terminal\Stream|resource, int given
+Terminal\Terminal::isTty(): Argument #1 ($stream) must be of type %sStream|resource, int given
 closed stream rejected

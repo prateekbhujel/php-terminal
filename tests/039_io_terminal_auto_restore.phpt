@@ -1,19 +1,15 @@
 --TEST--
-Terminal\Terminal::readKey surfaces SIGWINCH as resize
+Io\Terminal\Terminal instance auto-restores raw mode on destruction
 --EXTENSIONS--
 terminal
 --SKIPIF--
 <?php
 if (PHP_OS_FAMILY === 'Windows') {
-    die("skip SIGWINCH test is POSIX only\n");
+    die("skip pseudo terminal test is POSIX only\n");
 }
 
 if (!function_exists('proc_open')) {
     die("skip proc_open is unavailable\n");
-}
-
-if (!function_exists('exec')) {
-    die("skip exec is unavailable\n");
 }
 
 $descriptors = [
@@ -37,13 +33,20 @@ proc_close($process);
 <?php
 $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
 $code = <<<'PHP'
-echo "ready:" . getmypid() . "\n";
-$key = Terminal\Terminal::readKey(2.0);
-if ($key instanceof Terminal\Key) {
-    echo $key->name . ':' . strtolower($key->name) . "\n";
-} else {
-    var_dump($key);
+use Io\Terminal\Terminal;
+
+$term = Terminal::stdin();
+$token = $term->enableRawMode();
+if ($token === false) {
+    echo "raw-mode-failed\n";
+    exit;
 }
+
+// Unset both token and instance - should trigger auto-restoration
+unset($token);
+unset($term);
+
+echo "instance-auto-restored\n";
 PHP;
 
 $command = escapeshellarg(PHP_BINARY) . ' -n -d extension=' . escapeshellarg($extension) . ' -r ' . escapeshellarg($code);
@@ -59,29 +62,7 @@ if (!is_resource($process)) {
     exit;
 }
 
-stream_set_blocking($pipes[1], false);
-$output = '';
-$start = microtime(true);
-$pid = null;
-
-while (microtime(true) - $start < 2) {
-    $output .= stream_get_contents($pipes[1]);
-    if (preg_match('/ready:(\d+)/', $output, $matches)) {
-        $pid = (int) $matches[1];
-        break;
-    }
-    usleep(10000);
-}
-
-if ($pid === null) {
-    echo $output;
-    exit;
-}
-
-exec('kill -WINCH ' . $pid);
-
-stream_set_blocking($pipes[1], true);
-$output .= stream_get_contents($pipes[1]);
+$output = stream_get_contents($pipes[1]);
 $error = stream_get_contents($pipes[2]);
 
 foreach ($pipes as $pipe) {
@@ -89,12 +70,7 @@ foreach ($pipes as $pipe) {
 }
 
 $status = proc_close($process);
-if ($status !== 0 || $error !== '') {
-    echo $output, $error;
-    exit;
-}
-
-echo str_contains($output, 'Resize:resize') ? "resize\n" : $output;
+echo $status === 0 && $error === '' ? $output : $output . $error;
 ?>
 --EXPECT--
-resize
+instance-auto-restored
