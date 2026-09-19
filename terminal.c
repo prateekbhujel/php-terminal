@@ -66,13 +66,15 @@ static zend_class_entry *terminal_stream_ce;
 static zend_class_entry *terminal_color_depth_ce;
 static zend_class_entry *terminal_key_ce;
 static zend_class_entry *terminal_mode_token_ce;
+static zend_class_entry *terminal_terminal_size_ce;
 static zend_class_entry *terminal_terminal_ce;
 static zend_class_entry *legacy_terminal_ce;
 static zend_object_handlers terminal_mode_token_handlers;
 static zend_object_handlers terminal_object_handlers;
 
 typedef struct _terminal_object {
-	zval stream_val;
+	zval input_stream_val;
+	zval output_stream_val;
 	zend_object *active_mode_token;
 	zend_object std;
 } terminal_object;
@@ -157,7 +159,8 @@ static zend_object *terminal_create_object(zend_class_entry *ce)
 {
 	terminal_object *intern = zend_object_alloc(sizeof(terminal_object), ce);
 
-	ZVAL_UNDEF(&intern->stream_val);
+	ZVAL_UNDEF(&intern->input_stream_val);
+	ZVAL_UNDEF(&intern->output_stream_val);
 	intern->active_mode_token = NULL;
 
 	zend_object_std_init(&intern->std, ce);
@@ -183,9 +186,14 @@ static void terminal_free_obj(zend_object *object)
 		intern->active_mode_token = NULL;
 	}
 
-	if (!Z_ISUNDEF(intern->stream_val)) {
-		zval_ptr_dtor(&intern->stream_val);
-		ZVAL_UNDEF(&intern->stream_val);
+	if (!Z_ISUNDEF(intern->input_stream_val)) {
+		zval_ptr_dtor(&intern->input_stream_val);
+		ZVAL_UNDEF(&intern->input_stream_val);
+	}
+
+	if (!Z_ISUNDEF(intern->output_stream_val)) {
+		zval_ptr_dtor(&intern->output_stream_val);
+		ZVAL_UNDEF(&intern->output_stream_val);
 	}
 
 	zend_object_std_dtor(&intern->std);
@@ -2096,8 +2104,9 @@ static bool terminal_stream_target_init(
 		}
 		if (terminal_terminal_ce && instanceof_function(Z_OBJCE_P(stream_arg), terminal_terminal_ce)) {
 			terminal_object *term_obj = terminal_from_obj(Z_OBJ_P(stream_arg));
-			if (!Z_ISUNDEF(term_obj->stream_val)) {
-				return terminal_stream_target_init(&term_obj->stream_val, default_stream, arg_num, target);
+			zval *stream_val = (default_stream == TERMINAL_STREAM_STDIN) ? &term_obj->input_stream_val : &term_obj->output_stream_val;
+			if (!Z_ISUNDEF_P(stream_val)) {
+				return terminal_stream_target_init(stream_val, default_stream, arg_num, target);
 			}
 			return true;
 		}
@@ -2606,52 +2615,155 @@ static void terminal_do_read_secret(zval *stream_arg, zend_string *prompt, uint3
 	RETURN_THROWS();
 }
 
+/* Io\Terminal\TerminalSize methods */
+
+ZEND_METHOD(Io_Terminal_TerminalSize, __construct)
+{
+	zend_long cols = 0;
+	zend_long rows = 0;
+
+	ZEND_PARSE_PARAMETERS_START(2, 2)
+		Z_PARAM_LONG(cols)
+		Z_PARAM_LONG(rows)
+	ZEND_PARSE_PARAMETERS_END();
+
+	zend_update_property_long(terminal_terminal_size_ce, Z_OBJ_P(ZEND_THIS), "cols", sizeof("cols") - 1, cols);
+	zend_update_property_long(terminal_terminal_size_ce, Z_OBJ_P(ZEND_THIS), "rows", sizeof("rows") - 1, rows);
+	zend_update_property_long(terminal_terminal_size_ce, Z_OBJ_P(ZEND_THIS), "width", sizeof("width") - 1, cols);
+	zend_update_property_long(terminal_terminal_size_ce, Z_OBJ_P(ZEND_THIS), "height", sizeof("height") - 1, rows);
+}
+
+ZEND_METHOD(Io_Terminal_TerminalSize, toArray)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+
+	zval rv1, rv2;
+	zval *cols_p = zend_read_property(terminal_terminal_size_ce, Z_OBJ_P(ZEND_THIS), "cols", sizeof("cols") - 1, 1, &rv1);
+	zval *rows_p = zend_read_property(terminal_terminal_size_ce, Z_OBJ_P(ZEND_THIS), "rows", sizeof("rows") - 1, 1, &rv2);
+
+	array_init_size(return_value, 2);
+	add_assoc_long(return_value, "cols", zval_get_long(cols_p));
+	add_assoc_long(return_value, "rows", zval_get_long(rows_p));
+}
+
+static void terminal_create_terminal_size(zval *return_value, zend_long cols, zend_long rows)
+{
+	object_init_ex(return_value, terminal_terminal_size_ce);
+	zend_update_property_long(terminal_terminal_size_ce, Z_OBJ_P(return_value), "cols", sizeof("cols") - 1, cols);
+	zend_update_property_long(terminal_terminal_size_ce, Z_OBJ_P(return_value), "rows", sizeof("rows") - 1, rows);
+	zend_update_property_long(terminal_terminal_size_ce, Z_OBJ_P(return_value), "width", sizeof("width") - 1, cols);
+	zend_update_property_long(terminal_terminal_size_ce, Z_OBJ_P(return_value), "height", sizeof("height") - 1, rows);
+}
+
 /* Io\Terminal\Terminal instance methods */
 
 ZEND_METHOD(Io_Terminal_Terminal, __construct)
 {
-	zval *stream_arg = NULL;
+	zval *input_arg = NULL;
+	zval *output_arg = NULL;
 
-	ZEND_PARSE_PARAMETERS_START(0, 1)
+	ZEND_PARSE_PARAMETERS_START(0, 2)
 		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
+		Z_PARAM_ZVAL(input_arg)
+		Z_PARAM_ZVAL(output_arg)
 	ZEND_PARSE_PARAMETERS_END();
 
 	terminal_object *intern = Z_TERMINAL_P(ZEND_THIS);
 
-	if (stream_arg != NULL && !Z_ISUNDEF_P(stream_arg) && Z_TYPE_P(stream_arg) != IS_NULL) {
+	if (input_arg != NULL && !Z_ISUNDEF_P(input_arg) && Z_TYPE_P(input_arg) != IS_NULL) {
 		terminal_stream_target target;
-		if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 1, &target)) {
+		if (!terminal_stream_target_init(input_arg, TERMINAL_STREAM_STDIN, 1, &target)) {
 			RETURN_THROWS();
 		}
-		ZVAL_COPY(&intern->stream_val, stream_arg);
+		ZVAL_COPY(&intern->input_stream_val, input_arg);
 	} else {
-		ZVAL_OBJ_COPY(&intern->stream_val, zend_enum_get_case_cstr(terminal_stream_ce, "Stdout"));
+		ZVAL_OBJ_COPY(&intern->input_stream_val, zend_enum_get_case_cstr(terminal_stream_ce, "Stdin"));
+	}
+
+	if (output_arg != NULL && !Z_ISUNDEF_P(output_arg) && Z_TYPE_P(output_arg) != IS_NULL) {
+		terminal_stream_target target;
+		if (!terminal_stream_target_init(output_arg, TERMINAL_STREAM_STDOUT, 2, &target)) {
+			RETURN_THROWS();
+		}
+		ZVAL_COPY(&intern->output_stream_val, output_arg);
+	} else if (input_arg != NULL && !Z_ISUNDEF_P(input_arg) && Z_TYPE_P(input_arg) != IS_NULL) {
+		ZVAL_COPY(&intern->output_stream_val, input_arg);
+	} else {
+		ZVAL_OBJ_COPY(&intern->output_stream_val, zend_enum_get_case_cstr(terminal_stream_ce, "Stdout"));
 	}
 }
 
-ZEND_METHOD(Io_Terminal_Terminal, stdin)
+ZEND_METHOD(Io_Terminal_Terminal, create)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 	object_init_ex(return_value, terminal_terminal_ce);
 	terminal_object *intern = Z_TERMINAL_P(return_value);
-	ZVAL_OBJ_COPY(&intern->stream_val, zend_enum_get_case_cstr(terminal_stream_ce, "Stdin"));
+	ZVAL_OBJ_COPY(&intern->input_stream_val, zend_enum_get_case_cstr(terminal_stream_ce, "Stdin"));
+	ZVAL_OBJ_COPY(&intern->output_stream_val, zend_enum_get_case_cstr(terminal_stream_ce, "Stdout"));
 }
 
-ZEND_METHOD(Io_Terminal_Terminal, stdout)
+ZEND_METHOD(Io_Terminal_Terminal, open)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 	object_init_ex(return_value, terminal_terminal_ce);
 	terminal_object *intern = Z_TERMINAL_P(return_value);
-	ZVAL_OBJ_COPY(&intern->stream_val, zend_enum_get_case_cstr(terminal_stream_ce, "Stdout"));
+	ZVAL_OBJ_COPY(&intern->input_stream_val, zend_enum_get_case_cstr(terminal_stream_ce, "Stdin"));
+	ZVAL_OBJ_COPY(&intern->output_stream_val, zend_enum_get_case_cstr(terminal_stream_ce, "Stdout"));
 }
 
-ZEND_METHOD(Io_Terminal_Terminal, stderr)
+ZEND_METHOD(Io_Terminal_Terminal, fromStreams)
 {
-	ZEND_PARSE_PARAMETERS_NONE();
+	zval *input_arg = NULL;
+	zval *output_arg = NULL;
+
+	ZEND_PARSE_PARAMETERS_START(1, 2)
+		Z_PARAM_ZVAL(input_arg)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_ZVAL(output_arg)
+	ZEND_PARSE_PARAMETERS_END();
+
 	object_init_ex(return_value, terminal_terminal_ce);
 	terminal_object *intern = Z_TERMINAL_P(return_value);
-	ZVAL_OBJ_COPY(&intern->stream_val, zend_enum_get_case_cstr(terminal_stream_ce, "Stderr"));
+
+	if (input_arg != NULL && !Z_ISUNDEF_P(input_arg) && Z_TYPE_P(input_arg) != IS_NULL) {
+		terminal_stream_target target;
+		if (!terminal_stream_target_init(input_arg, TERMINAL_STREAM_STDIN, 1, &target)) {
+			RETURN_THROWS();
+		}
+		ZVAL_COPY(&intern->input_stream_val, input_arg);
+	} else {
+		ZVAL_OBJ_COPY(&intern->input_stream_val, zend_enum_get_case_cstr(terminal_stream_ce, "Stdin"));
+	}
+
+	if (output_arg != NULL && !Z_ISUNDEF_P(output_arg) && Z_TYPE_P(output_arg) != IS_NULL) {
+		terminal_stream_target target;
+		if (!terminal_stream_target_init(output_arg, TERMINAL_STREAM_STDOUT, 2, &target)) {
+			RETURN_THROWS();
+		}
+		ZVAL_COPY(&intern->output_stream_val, output_arg);
+	} else {
+		ZVAL_COPY(&intern->output_stream_val, &intern->input_stream_val);
+	}
+}
+
+ZEND_METHOD(Io_Terminal_Terminal, fromStream)
+{
+	zval *stream_arg;
+
+	ZEND_PARSE_PARAMETERS_START(1, 1)
+		Z_PARAM_ZVAL(stream_arg)
+	ZEND_PARSE_PARAMETERS_END();
+
+	object_init_ex(return_value, terminal_terminal_ce);
+	terminal_object *intern = Z_TERMINAL_P(return_value);
+
+	terminal_stream_target target;
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDOUT, 1, &target)) {
+		RETURN_THROWS();
+	}
+
+	ZVAL_COPY(&intern->input_stream_val, stream_arg);
+	ZVAL_COPY(&intern->output_stream_val, stream_arg);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, getBackend)
@@ -2660,14 +2772,37 @@ ZEND_METHOD(Io_Terminal_Terminal, getBackend)
 	terminal_do_get_backend(return_value);
 }
 
+ZEND_METHOD(Io_Terminal_Terminal, getInputStream)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+	terminal_object *intern = Z_TERMINAL_P(ZEND_THIS);
+	if (Z_ISUNDEF(intern->input_stream_val)) {
+		RETURN_NULL();
+	}
+	RETURN_COPY(&intern->input_stream_val);
+}
+
+ZEND_METHOD(Io_Terminal_Terminal, getOutputStream)
+{
+	ZEND_PARSE_PARAMETERS_NONE();
+	terminal_object *intern = Z_TERMINAL_P(ZEND_THIS);
+	if (Z_ISUNDEF(intern->output_stream_val)) {
+		RETURN_NULL();
+	}
+	RETURN_COPY(&intern->output_stream_val);
+}
+
 ZEND_METHOD(Io_Terminal_Terminal, getStream)
 {
 	ZEND_PARSE_PARAMETERS_NONE();
 	terminal_object *intern = Z_TERMINAL_P(ZEND_THIS);
-	if (Z_ISUNDEF(intern->stream_val)) {
-		RETURN_NULL();
+	if (!Z_ISUNDEF(intern->output_stream_val)) {
+		RETURN_COPY(&intern->output_stream_val);
 	}
-	RETURN_COPY(&intern->stream_val);
+	if (!Z_ISUNDEF(intern->input_stream_val)) {
+		RETURN_COPY(&intern->input_stream_val);
+	}
+	RETURN_NULL();
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, isTty)
@@ -2675,7 +2810,7 @@ ZEND_METHOD(Io_Terminal_Terminal, isTty)
 	terminal_object *intern;
 	ZEND_PARSE_PARAMETERS_NONE();
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_is_tty(&intern->stream_val, 0, return_value);
+	terminal_do_is_tty(&intern->output_stream_val, 0, return_value);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, supportsAnsi)
@@ -2683,7 +2818,7 @@ ZEND_METHOD(Io_Terminal_Terminal, supportsAnsi)
 	terminal_object *intern;
 	ZEND_PARSE_PARAMETERS_NONE();
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_supports_ansi(&intern->stream_val, 0, return_value);
+	terminal_do_supports_ansi(&intern->output_stream_val, 0, return_value);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, enableAnsi)
@@ -2691,31 +2826,29 @@ ZEND_METHOD(Io_Terminal_Terminal, enableAnsi)
 	terminal_object *intern;
 	ZEND_PARSE_PARAMETERS_NONE();
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_enable_ansi(&intern->stream_val, 0, return_value);
+	terminal_do_enable_ansi(&intern->output_stream_val, 0, return_value);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, getSize)
 {
 	terminal_object *intern;
-	ZEND_PARSE_PARAMETERS_NONE();
-	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_get_size(&intern->stream_val, 0, return_value);
-}
+	terminal_stream_target stream;
+	zend_long columns = 0;
+	zend_long rows = 0;
 
-ZEND_METHOD(Io_Terminal_Terminal, getWidth)
-{
-	terminal_object *intern;
 	ZEND_PARSE_PARAMETERS_NONE();
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_get_width(&intern->stream_val, 0, return_value);
-}
 
-ZEND_METHOD(Io_Terminal_Terminal, getHeight)
-{
-	terminal_object *intern;
-	ZEND_PARSE_PARAMETERS_NONE();
-	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_get_height(&intern->stream_val, 0, return_value);
+	if (!terminal_stream_target_init(&intern->output_stream_val, TERMINAL_STREAM_STDOUT, 0, &stream)) {
+		RETURN_THROWS();
+	}
+
+	if (!terminal_stream_size(stream.native_stream, &columns, &rows)
+		&& !terminal_size_from_environment(&columns, &rows)) {
+		RETURN_FALSE;
+	}
+
+	terminal_create_terminal_size(return_value, columns, rows);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, getColorDepth)
@@ -2723,7 +2856,7 @@ ZEND_METHOD(Io_Terminal_Terminal, getColorDepth)
 	terminal_object *intern;
 	ZEND_PARSE_PARAMETERS_NONE();
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_get_color_depth(&intern->stream_val, 0, return_value);
+	terminal_do_get_color_depth(&intern->output_stream_val, 0, return_value);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, supportsColor)
@@ -2737,7 +2870,7 @@ ZEND_METHOD(Io_Terminal_Terminal, supportsColor)
 	ZEND_PARSE_PARAMETERS_END();
 
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_supports_color(&intern->stream_val, depth_arg, 1, return_value);
+	terminal_do_supports_color(&intern->output_stream_val, depth_arg, 1, return_value);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, supportsTrueColor)
@@ -2745,7 +2878,7 @@ ZEND_METHOD(Io_Terminal_Terminal, supportsTrueColor)
 	terminal_object *intern;
 	ZEND_PARSE_PARAMETERS_NONE();
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_supports_true_color(&intern->stream_val, 0, return_value);
+	terminal_do_supports_true_color(&intern->output_stream_val, 0, return_value);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, setTitle)
@@ -2758,7 +2891,7 @@ ZEND_METHOD(Io_Terminal_Terminal, setTitle)
 	ZEND_PARSE_PARAMETERS_END();
 
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_set_title(&intern->stream_val, title, 1, return_value);
+	terminal_do_set_title(&intern->output_stream_val, title, 1, return_value);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, beep)
@@ -2766,7 +2899,7 @@ ZEND_METHOD(Io_Terminal_Terminal, beep)
 	terminal_object *intern;
 	ZEND_PARSE_PARAMETERS_NONE();
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_beep(&intern->stream_val, 0, return_value);
+	terminal_do_beep(&intern->output_stream_val, 0, return_value);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, write)
@@ -2779,7 +2912,7 @@ ZEND_METHOD(Io_Terminal_Terminal, write)
 	ZEND_PARSE_PARAMETERS_END();
 
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_write(&intern->stream_val, data, 1, return_value);
+	terminal_do_write(&intern->output_stream_val, data, 1, return_value);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, enableRawMode)
@@ -2787,7 +2920,7 @@ ZEND_METHOD(Io_Terminal_Terminal, enableRawMode)
 	terminal_object *intern;
 	ZEND_PARSE_PARAMETERS_NONE();
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_enable_raw_mode(&intern->stream_val, 0, return_value);
+	terminal_do_enable_raw_mode(&intern->input_stream_val, 0, return_value);
 
 	if (Z_TYPE_P(return_value) == IS_OBJECT && instanceof_function(Z_OBJCE_P(return_value), terminal_mode_token_ce)) {
 		if (intern->active_mode_token != NULL) {
@@ -2856,7 +2989,7 @@ ZEND_METHOD(Io_Terminal_Terminal, readKey)
 	}
 
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_read_key(&intern->stream_val, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null, 0, return_value);
+	terminal_do_read_key(&intern->input_stream_val, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null, 0, return_value);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, readSecret)
@@ -2870,201 +3003,7 @@ ZEND_METHOD(Io_Terminal_Terminal, readSecret)
 	ZEND_PARSE_PARAMETERS_END();
 
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_read_secret(&intern->stream_val, prompt, 0, return_value);
-}
-
-/* Io\Terminal free-standing functions */
-
-ZEND_FUNCTION(Io_Terminal_get_backend)
-{
-	ZEND_PARSE_PARAMETERS_NONE();
-	terminal_do_get_backend(return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_is_tty)
-{
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(0, 1)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_is_tty(stream_arg, 1, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_supports_ansi)
-{
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(0, 1)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_supports_ansi(stream_arg, 1, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_enable_ansi)
-{
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(0, 1)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_enable_ansi(stream_arg, 1, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_get_size)
-{
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(0, 1)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_get_size(stream_arg, 1, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_get_width)
-{
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(0, 1)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_get_width(stream_arg, 1, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_get_height)
-{
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(0, 1)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_get_height(stream_arg, 1, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_get_color_depth)
-{
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(0, 1)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_get_color_depth(stream_arg, 1, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_supports_color)
-{
-	zend_object *depth_arg = NULL;
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(0, 2)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_OBJ_OF_CLASS(depth_arg, terminal_color_depth_ce)
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_supports_color(stream_arg, depth_arg, 2, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_supports_true_color)
-{
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(0, 1)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_supports_true_color(stream_arg, 1, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_set_title)
-{
-	zend_string *title;
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(1, 2)
-		Z_PARAM_STR(title)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_set_title(stream_arg, title, 2, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_beep)
-{
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(0, 1)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_beep(stream_arg, 1, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_write)
-{
-	zend_string *data;
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(1, 2)
-		Z_PARAM_STR(data)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_write(stream_arg, data, 2, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_enable_raw_mode)
-{
-	zval *stream_arg = NULL;
-	ZEND_PARSE_PARAMETERS_START(0, 1)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_enable_raw_mode(stream_arg, 1, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_restore_mode)
-{
-	zval *mode_token;
-	ZEND_PARSE_PARAMETERS_START(1, 1)
-		Z_PARAM_OBJECT_OF_CLASS(mode_token, terminal_mode_token_ce)
-	ZEND_PARSE_PARAMETERS_END();
-	terminal_do_restore_mode(mode_token, 1, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_read_key)
-{
-	double timeout = 0;
-	double sequence_timeout = 0;
-	bool timeout_is_null = true;
-	bool sequence_timeout_is_null = true;
-	zval *stream_arg = NULL;
-
-	ZEND_PARSE_PARAMETERS_START(0, 3)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_DOUBLE_OR_NULL(timeout, timeout_is_null)
-		Z_PARAM_DOUBLE_OR_NULL(sequence_timeout, sequence_timeout_is_null)
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-
-	if (!timeout_is_null && (zend_isnan(timeout) || timeout < 0)) {
-		zend_argument_value_error(1, "must be greater than or equal to 0");
-		RETURN_THROWS();
-	}
-	if (!sequence_timeout_is_null && (zend_isnan(sequence_timeout) || sequence_timeout < 0)) {
-		zend_argument_value_error(2, "must be greater than or equal to 0");
-		RETURN_THROWS();
-	}
-
-	terminal_do_read_key(stream_arg, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null, 3, return_value);
-}
-
-ZEND_FUNCTION(Io_Terminal_read_secret)
-{
-	zend_string *prompt = NULL;
-	zval *stream_arg = NULL;
-
-	ZEND_PARSE_PARAMETERS_START(0, 2)
-		Z_PARAM_OPTIONAL
-		Z_PARAM_STR(prompt)
-		Z_PARAM_ZVAL(stream_arg)
-	ZEND_PARSE_PARAMETERS_END();
-
-	terminal_do_read_secret(stream_arg, prompt, 2, return_value);
+	terminal_do_read_secret(&intern->input_stream_val, prompt, 0, return_value);
 }
 
 /* Legacy Terminal\Terminal static methods for full backward compatibility */
@@ -3306,6 +3245,8 @@ PHP_MINIT_FUNCTION(terminal)
 	terminal_mode_token_handlers.free_obj = terminal_mode_token_free_obj;
 	terminal_mode_token_handlers.clone_obj = NULL;
 
+	terminal_terminal_size_ce = register_class_Io_Terminal_TerminalSize();
+
 	terminal_terminal_ce = register_class_Io_Terminal_Terminal();
 	terminal_terminal_ce->create_object = terminal_create_object;
 	terminal_terminal_ce->ce_flags |= ZEND_ACC_NO_DYNAMIC_PROPERTIES|ZEND_ACC_NOT_SERIALIZABLE;
@@ -3340,7 +3281,7 @@ PHP_MINFO_FUNCTION(terminal)
 zend_module_entry terminal_module_entry = {
 	STANDARD_MODULE_HEADER,
 	"terminal",
-	ext_functions,
+	NULL,
 	PHP_MINIT(terminal),
 	NULL,
 	NULL,

@@ -12,33 +12,36 @@ use Io\Terminal\ColorDepth;
 use Io\Terminal\Stream;
 use Io\Terminal\Terminal;
 
-$stdout = Terminal::stdout();
-$stderr = Terminal::stderr();
-$stdin = Terminal::stdin();
+$terminal = Terminal::create();
+$opened = Terminal::open();
 
-var_dump($stdout instanceof Terminal);
-var_dump($stdout->getStream() === Stream::Stdout);
-var_dump($stderr->getStream() === Stream::Stderr);
-var_dump($stdin->getStream() === Stream::Stdin);
+var_dump($terminal instanceof Terminal);
+var_dump($opened instanceof Terminal);
+var_dump($terminal->getInputStream() === Stream::Stdin);
+var_dump($terminal->getOutputStream() === Stream::Stdout);
 
 $backend = Terminal::getBackend();
 var_dump($backend instanceof Backend);
 
-$custom = new Terminal(fopen('php://temp', 'w+'));
+$temp = fopen('php://temp', 'w+');
+$custom = Terminal::fromStream($temp);
 var_dump(is_resource($custom->getStream()));
 var_dump($custom->isTty());
 var_dump($custom->supportsAnsi());
 var_dump($custom->write("test") === 4);
 
-$size = $stdout->getSize();
-var_dump(is_array($size) && $size['cols'] === 100 && $size['rows'] === 30);
-var_dump($stdout->getWidth() === 100);
-var_dump($stdout->getHeight() === 30);
+$size = $terminal->getSize();
+var_dump($size instanceof \Io\Terminal\TerminalSize);
+var_dump($size->cols === 100);
+var_dump($size->rows === 30);
+var_dump($size->width === 100);
+var_dump($size->height === 30);
+var_dump($size->toArray() === ['cols' => 100, 'rows' => 30]);
 
-$depth = $stdout->getColorDepth();
+$depth = $terminal->getColorDepth();
 var_dump($depth instanceof ColorDepth);
-var_dump(is_bool($stdout->supportsTrueColor()));
-var_dump(is_bool($stdout->supportsColor(ColorDepth::None)));
+var_dump(is_bool($terminal->supportsTrueColor()));
+var_dump(is_bool($terminal->supportsColor(ColorDepth::None)));
 ?>
 --EXPECT--
 bool(true)
@@ -49,6 +52,9 @@ bool(true)
 bool(true)
 bool(false)
 bool(false)
+bool(true)
+bool(true)
+bool(true)
 bool(true)
 bool(true)
 bool(true)

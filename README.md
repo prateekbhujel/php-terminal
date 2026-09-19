@@ -23,9 +23,9 @@ It exposes the pieces that are awkward to normalize in userland, especially once
 
 Created and maintained by Pratik Bhujel.
 
-Current release: `v0.8.0`.
+Current release: `v0.9.0`.
 
-`v0.8.0` restructures the extension under `Io\Terminal`, introducing instance-based `Io\Terminal\Terminal` handles with RAII automatic raw-mode restoration on destruction (Rust termion style), free-standing procedural functions, and unbacked core-aligned enums, while maintaining 100% backward compatibility via `Terminal\*` legacy facades and aliases.
+`v0.9.0` aligns with core PHP API standards following review by Tim Düsterhus: unifying input/output streams into a cohesive `Terminal` session (`open()`, `create()`, `fromStreams()`), removing duplicate procedural functions to enforce RAII lifecycle safety, and adding the `Io\Terminal\TerminalSize` value object for dimensions. Full backward compatibility is preserved via `Terminal\*` legacy facades and aliases.
 
 ## Install
 
@@ -73,13 +73,14 @@ This extension stays narrower:
 
 ### 1. Object-Oriented Instance API (`Io\Terminal\Terminal`)
 
-Encapsulates stream descriptors and guarantees terminal state restoration when instances go out of scope:
+Encapsulates a unified interactive terminal session and guarantees terminal state restoration when instances go out of scope:
 
 ```php
 use Io\Terminal\Terminal;
 use Io\Terminal\Key;
 
-$term = Terminal::stdin();
+// Open default controlling terminal session
+$term = Terminal::open(); // or Terminal::create()
 $token = $term->enableRawMode();
 
 // Read keys with instant non-canonical single-character responsiveness
@@ -92,10 +93,15 @@ if ($key === Key::Up) {
 $term->restoreMode();
 ```
 
+Constructors:
+- `Terminal::open(): Terminal` — Primary factory constructor for standard terminal session
+- `Terminal::create(): Terminal` — Synonym for `Terminal::open()`
+- `Terminal::fromStreams(mixed $input, mixed $output = null): Terminal` — Custom stream resources
+- `Terminal::fromStream(mixed $stream): Terminal` — Single duplex stream resource
+
 Instance methods:
-- `Terminal::stdin(): Terminal`
-- `Terminal::stdout(): Terminal`
-- `Terminal::stderr(): Terminal`
+- `$term->getInputStream(): mixed`
+- `$term->getOutputStream(): mixed`
 - `$term->getStream(): mixed`
 - `$term->isTty(): bool`
 - `$term->supportsAnsi(): bool`
@@ -103,9 +109,7 @@ Instance methods:
 - `$term->getColorDepth(): ColorDepth`
 - `$term->supportsColor(ColorDepth $depth = ColorDepth::Standard): bool`
 - `$term->supportsTrueColor(): bool`
-- `$term->getSize(): array{cols:int, rows:int}|false`
-- `$term->getWidth(): int|false`
-- `$term->getHeight(): int|false`
+- `$term->getSize(): TerminalSize|false`
 - `$term->setTitle(string $title): bool`
 - `$term->beep(): bool`
 - `$term->write(string $data): int|false`
@@ -114,25 +118,14 @@ Instance methods:
 - `$term->readKey(?float $timeout = null, ?float $sequenceTimeout = null): Key|string|false`
 - `$term->readSecret(string $prompt = ''): string`
 
-### 2. Free-Standing Procedural Functions (`Io\Terminal\*`)
+### 2. Dimension Value Object (`Io\Terminal\TerminalSize`)
 
-- `Io\Terminal\get_backend(): Backend`
-- `Io\Terminal\is_tty(mixed $stream = UNKNOWN): bool`
-- `Io\Terminal\supports_ansi(mixed $stream = UNKNOWN): bool`
-- `Io\Terminal\enable_ansi(mixed $stream = UNKNOWN): bool`
-- `Io\Terminal\get_size(mixed $stream = UNKNOWN): array{cols:int, rows:int}|false`
-- `Io\Terminal\get_width(mixed $stream = UNKNOWN): int|false`
-- `Io\Terminal\get_height(mixed $stream = UNKNOWN): int|false`
-- `Io\Terminal\get_color_depth(mixed $stream = UNKNOWN): ColorDepth`
-- `Io\Terminal\supports_color(ColorDepth $depth = ColorDepth::Standard, mixed $stream = UNKNOWN): bool`
-- `Io\Terminal\supports_true_color(mixed $stream = UNKNOWN): bool`
-- `Io\Terminal\set_title(string $title, mixed $stream = UNKNOWN): bool`
-- `Io\Terminal\beep(mixed $stream = UNKNOWN): bool`
-- `Io\Terminal\write(string $data, mixed $stream = UNKNOWN): int|false`
-- `Io\Terminal\enable_raw_mode(mixed $stream = UNKNOWN): ModeToken|false`
-- `Io\Terminal\restore_mode(ModeToken $mode): bool`
-- `Io\Terminal\read_key(?float $timeout = null, ?float $sequenceTimeout = null, mixed $stream = UNKNOWN): Key|string|false`
-- `Io\Terminal\read_secret(string $prompt = '', mixed $stream = UNKNOWN): string`
+Returned by `$term->getSize()`:
+- `$size->cols`: int
+- `$size->rows`: int
+- `$size->width`: int (alias for `cols`)
+- `$size->height`: int (alias for `rows`)
+- `$size->toArray()`: `array{cols: int, rows: int}`
 
 ### 3. Enums (`Io\Terminal\*`)
 

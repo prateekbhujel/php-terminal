@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0 - 2026-09-19
+
+- **Core Alignment Refactor (Tim Düsterhus Review)**:
+  - **Stream Unification**: Unified separate stream descriptors into a cohesive terminal session handle via `Terminal::open()`, `Terminal::create()`, and `Terminal::fromStreams($input, $output)`. Removed fragmented `stdin()`, `stdout()`, and `stderr()` constructors.
+  - **Pure OO Architecture**: Eliminated duplicate top-level procedural functions in `Io\Terminal`, making the extension strictly object-oriented to enforce RAII destructor cleanup safety.
+  - **Dimension Value Object**: Introduced `Io\Terminal\TerminalSize` (`$cols`, `$rows`, `$width`, `$height`, `toArray()`) returned by `$term->getSize()`. Removed redundant `getWidth()` and `getHeight()` methods from `Io\Terminal\Terminal`.
+  - **Stream Accessors**: Added `getInputStream()` and `getOutputStream()` accessors to `Io\Terminal\Terminal`.
+
 ## 0.8.0 - 2026-09-18
 
 - Restructured extension under the `Io\Terminal` namespace to align with modern PHP core conventions.

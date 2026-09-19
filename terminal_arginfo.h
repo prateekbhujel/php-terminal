@@ -1,68 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 60f8f753765f0022a192ce679d342351424faa9c */
-
-ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_Io_Terminal_get_backend, 0, 0, Io\\Terminal\\Backend, 0)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Io_Terminal_is_tty, 0, 0, _IS_BOOL, 0)
-	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
-ZEND_END_ARG_INFO()
-
-#define arginfo_Io_Terminal_supports_ansi arginfo_Io_Terminal_is_tty
-
-#define arginfo_Io_Terminal_enable_ansi arginfo_Io_Terminal_is_tty
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_Io_Terminal_get_size, 0, 0, MAY_BE_ARRAY|MAY_BE_FALSE)
-	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_Io_Terminal_get_width, 0, 0, MAY_BE_LONG|MAY_BE_FALSE)
-	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
-ZEND_END_ARG_INFO()
-
-#define arginfo_Io_Terminal_get_height arginfo_Io_Terminal_get_width
-
-ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_Io_Terminal_get_color_depth, 0, 0, Io\\Terminal\\ColorDepth, 0)
-	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Io_Terminal_supports_color, 0, 0, _IS_BOOL, 0)
-	ZEND_ARG_OBJ_INFO(0, depth, Io\\Terminal\\ColorDepth, 0)
-	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
-ZEND_END_ARG_INFO()
-
-#define arginfo_Io_Terminal_supports_true_color arginfo_Io_Terminal_is_tty
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Io_Terminal_set_title, 0, 1, _IS_BOOL, 0)
-	ZEND_ARG_TYPE_INFO(0, title, IS_STRING, 0)
-	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
-ZEND_END_ARG_INFO()
-
-#define arginfo_Io_Terminal_beep arginfo_Io_Terminal_is_tty
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_Io_Terminal_write, 0, 1, MAY_BE_LONG|MAY_BE_FALSE)
-	ZEND_ARG_TYPE_INFO(0, data, IS_STRING, 0)
-	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_Io_Terminal_enable_raw_mode, 0, 0, Io\\Terminal\\ModeToken, MAY_BE_FALSE)
-	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Io_Terminal_restore_mode, 0, 1, _IS_BOOL, 0)
-	ZEND_ARG_OBJ_INFO(0, mode, Io\\Terminal\\ModeToken, 0)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_Io_Terminal_read_key, 0, 0, Io\\Terminal\\Key, MAY_BE_STRING|MAY_BE_FALSE)
-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, timeout, IS_DOUBLE, 1, "null")
-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, sequenceTimeout, IS_DOUBLE, 1, "null")
-	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
-ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_Io_Terminal_read_secret, 0, 0, IS_STRING, 0)
-	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, prompt, IS_STRING, 0, "\"\"")
-	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
-ZEND_END_ARG_INFO()
+ * Stub hash: 1f169f04cbba1b5c7a42ff87c74d579e1af1ed77 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Io_Terminal_ColorDepth_bits, 0, 0, IS_LONG, 0)
 ZEND_END_ARG_INFO()
@@ -70,21 +7,42 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Io_Terminal_ModeToken___construct, 0, 0, 0)
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Io_Terminal_TerminalSize___construct, 0, 0, 2)
+	ZEND_ARG_TYPE_INFO(0, cols, IS_LONG, 0)
+	ZEND_ARG_TYPE_INFO(0, rows, IS_LONG, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Io_Terminal_TerminalSize_toArray, 0, 0, IS_ARRAY, 0)
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_INFO_EX(arginfo_class_Io_Terminal_Terminal___construct, 0, 0, 0)
+	ZEND_ARG_TYPE_INFO(0, input, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, output, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Io_Terminal_Terminal_create, 0, 0, Io\\Terminal\\Terminal, 0)
+ZEND_END_ARG_INFO()
+
+#define arginfo_class_Io_Terminal_Terminal_open arginfo_class_Io_Terminal_Terminal_create
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Io_Terminal_Terminal_fromStreams, 0, 0, Io\\Terminal\\Terminal, 0)
+	ZEND_ARG_TYPE_INFO(0, input, IS_MIXED, 0)
+	ZEND_ARG_TYPE_INFO(0, output, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Io_Terminal_Terminal_fromStream, 0, 1, Io\\Terminal\\Terminal, 0)
 	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
 
-ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Io_Terminal_Terminal_stdin, 0, 0, Io\\Terminal\\Terminal, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Io_Terminal_Terminal_getBackend, 0, 0, Io\\Terminal\\Backend, 0)
 ZEND_END_ARG_INFO()
 
-#define arginfo_class_Io_Terminal_Terminal_stdout arginfo_class_Io_Terminal_Terminal_stdin
-
-#define arginfo_class_Io_Terminal_Terminal_stderr arginfo_class_Io_Terminal_Terminal_stdin
-
-#define arginfo_class_Io_Terminal_Terminal_getBackend arginfo_Io_Terminal_get_backend
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Io_Terminal_Terminal_getStream, 0, 0, IS_MIXED, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Io_Terminal_Terminal_getInputStream, 0, 0, IS_MIXED, 0)
 ZEND_END_ARG_INFO()
+
+#define arginfo_class_Io_Terminal_Terminal_getOutputStream arginfo_class_Io_Terminal_Terminal_getInputStream
+
+#define arginfo_class_Io_Terminal_Terminal_getStream arginfo_class_Io_Terminal_Terminal_getInputStream
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Io_Terminal_Terminal_isTty, 0, 0, _IS_BOOL, 0)
 ZEND_END_ARG_INFO()
@@ -93,13 +51,8 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_class_Io_Terminal_Terminal_enableAnsi arginfo_class_Io_Terminal_Terminal_isTty
 
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Io_Terminal_Terminal_getSize, 0, 0, MAY_BE_ARRAY|MAY_BE_FALSE)
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_class_Io_Terminal_Terminal_getSize, 0, 0, Io\\Terminal\\TerminalSize, MAY_BE_FALSE)
 ZEND_END_ARG_INFO()
-
-ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Io_Terminal_Terminal_getWidth, 0, 0, MAY_BE_LONG|MAY_BE_FALSE)
-ZEND_END_ARG_INFO()
-
-#define arginfo_class_Io_Terminal_Terminal_getHeight arginfo_class_Io_Terminal_Terminal_getWidth
 
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Io_Terminal_Terminal_getColorDepth, 0, 0, Io\\Terminal\\ColorDepth, 0)
 ZEND_END_ARG_INFO()
@@ -136,71 +89,78 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Io_Terminal_Terminal_readS
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, prompt, IS_STRING, 0, "\"\"")
 ZEND_END_ARG_INFO()
 
-#define arginfo_class_Terminal_Terminal_getBackend arginfo_Io_Terminal_get_backend
+#define arginfo_class_Terminal_Terminal_getBackend arginfo_class_Io_Terminal_Terminal_getBackend
 
-#define arginfo_class_Terminal_Terminal_isTty arginfo_Io_Terminal_is_tty
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Terminal_Terminal_isTty, 0, 0, _IS_BOOL, 0)
+	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
 
-#define arginfo_class_Terminal_Terminal_supportsAnsi arginfo_Io_Terminal_is_tty
+#define arginfo_class_Terminal_Terminal_supportsAnsi arginfo_class_Terminal_Terminal_isTty
 
-#define arginfo_class_Terminal_Terminal_enableAnsi arginfo_Io_Terminal_is_tty
+#define arginfo_class_Terminal_Terminal_enableAnsi arginfo_class_Terminal_Terminal_isTty
 
-#define arginfo_class_Terminal_Terminal_getSize arginfo_Io_Terminal_get_size
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_getSize, 0, 0, MAY_BE_ARRAY|MAY_BE_FALSE)
+	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
 
-#define arginfo_class_Terminal_Terminal_getWidth arginfo_Io_Terminal_get_width
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_getWidth, 0, 0, MAY_BE_LONG|MAY_BE_FALSE)
+	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
 
-#define arginfo_class_Terminal_Terminal_getHeight arginfo_Io_Terminal_get_width
+#define arginfo_class_Terminal_Terminal_getHeight arginfo_class_Terminal_Terminal_getWidth
 
-#define arginfo_class_Terminal_Terminal_getColorDepth arginfo_Io_Terminal_get_color_depth
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Terminal_Terminal_getColorDepth, 0, 0, Io\\Terminal\\ColorDepth, 0)
+	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
 
-#define arginfo_class_Terminal_Terminal_supportsColor arginfo_Io_Terminal_supports_color
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Terminal_Terminal_supportsColor, 0, 0, _IS_BOOL, 0)
+	ZEND_ARG_OBJ_INFO(0, depth, Io\\Terminal\\ColorDepth, 0)
+	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
 
-#define arginfo_class_Terminal_Terminal_supportsTrueColor arginfo_Io_Terminal_is_tty
+#define arginfo_class_Terminal_Terminal_supportsTrueColor arginfo_class_Terminal_Terminal_isTty
 
-#define arginfo_class_Terminal_Terminal_setTitle arginfo_Io_Terminal_set_title
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Terminal_Terminal_setTitle, 0, 1, _IS_BOOL, 0)
+	ZEND_ARG_TYPE_INFO(0, title, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
 
-#define arginfo_class_Terminal_Terminal_beep arginfo_Io_Terminal_is_tty
+#define arginfo_class_Terminal_Terminal_beep arginfo_class_Terminal_Terminal_isTty
 
-#define arginfo_class_Terminal_Terminal_write arginfo_Io_Terminal_write
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_write, 0, 1, MAY_BE_LONG|MAY_BE_FALSE)
+	ZEND_ARG_TYPE_INFO(0, data, IS_STRING, 0)
+	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
 
-#define arginfo_class_Terminal_Terminal_enableRawMode arginfo_Io_Terminal_enable_raw_mode
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_class_Terminal_Terminal_enableRawMode, 0, 0, Io\\Terminal\\ModeToken, MAY_BE_FALSE)
+	ZEND_ARG_TYPE_INFO(0, stream, IS_MIXED, 0)
+ZEND_END_ARG_INFO()
 
-#define arginfo_class_Terminal_Terminal_restoreMode arginfo_Io_Terminal_restore_mode
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Terminal_Terminal_restoreMode, 0, 1, _IS_BOOL, 0)
+	ZEND_ARG_OBJ_INFO(0, mode, Io\\Terminal\\ModeToken, 0)
+ZEND_END_ARG_INFO()
 
 #define arginfo_class_Terminal_Terminal_readKey arginfo_class_Io_Terminal_Terminal_readKey
 
 #define arginfo_class_Terminal_Terminal_readSecret arginfo_class_Io_Terminal_Terminal_readSecret
 
-ZEND_FUNCTION(Io_Terminal_get_backend);
-ZEND_FUNCTION(Io_Terminal_is_tty);
-ZEND_FUNCTION(Io_Terminal_supports_ansi);
-ZEND_FUNCTION(Io_Terminal_enable_ansi);
-ZEND_FUNCTION(Io_Terminal_get_size);
-ZEND_FUNCTION(Io_Terminal_get_width);
-ZEND_FUNCTION(Io_Terminal_get_height);
-ZEND_FUNCTION(Io_Terminal_get_color_depth);
-ZEND_FUNCTION(Io_Terminal_supports_color);
-ZEND_FUNCTION(Io_Terminal_supports_true_color);
-ZEND_FUNCTION(Io_Terminal_set_title);
-ZEND_FUNCTION(Io_Terminal_beep);
-ZEND_FUNCTION(Io_Terminal_write);
-ZEND_FUNCTION(Io_Terminal_enable_raw_mode);
-ZEND_FUNCTION(Io_Terminal_restore_mode);
-ZEND_FUNCTION(Io_Terminal_read_key);
-ZEND_FUNCTION(Io_Terminal_read_secret);
 ZEND_METHOD(Io_Terminal_ColorDepth, bits);
 ZEND_METHOD(Io_Terminal_ModeToken, __construct);
+ZEND_METHOD(Io_Terminal_TerminalSize, __construct);
+ZEND_METHOD(Io_Terminal_TerminalSize, toArray);
 ZEND_METHOD(Io_Terminal_Terminal, __construct);
-ZEND_METHOD(Io_Terminal_Terminal, stdin);
-ZEND_METHOD(Io_Terminal_Terminal, stdout);
-ZEND_METHOD(Io_Terminal_Terminal, stderr);
+ZEND_METHOD(Io_Terminal_Terminal, create);
+ZEND_METHOD(Io_Terminal_Terminal, open);
+ZEND_METHOD(Io_Terminal_Terminal, fromStreams);
+ZEND_METHOD(Io_Terminal_Terminal, fromStream);
 ZEND_METHOD(Io_Terminal_Terminal, getBackend);
+ZEND_METHOD(Io_Terminal_Terminal, getInputStream);
+ZEND_METHOD(Io_Terminal_Terminal, getOutputStream);
 ZEND_METHOD(Io_Terminal_Terminal, getStream);
 ZEND_METHOD(Io_Terminal_Terminal, isTty);
 ZEND_METHOD(Io_Terminal_Terminal, supportsAnsi);
 ZEND_METHOD(Io_Terminal_Terminal, enableAnsi);
 ZEND_METHOD(Io_Terminal_Terminal, getSize);
-ZEND_METHOD(Io_Terminal_Terminal, getWidth);
-ZEND_METHOD(Io_Terminal_Terminal, getHeight);
 ZEND_METHOD(Io_Terminal_Terminal, getColorDepth);
 ZEND_METHOD(Io_Terminal_Terminal, supportsColor);
 ZEND_METHOD(Io_Terminal_Terminal, supportsTrueColor);
@@ -229,27 +189,6 @@ ZEND_METHOD(Terminal_Terminal, restoreMode);
 ZEND_METHOD(Terminal_Terminal, readKey);
 ZEND_METHOD(Terminal_Terminal, readSecret);
 
-static const zend_function_entry ext_functions[] = {
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "get_backend"), zif_Io_Terminal_get_backend, arginfo_Io_Terminal_get_backend, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "is_tty"), zif_Io_Terminal_is_tty, arginfo_Io_Terminal_is_tty, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "supports_ansi"), zif_Io_Terminal_supports_ansi, arginfo_Io_Terminal_supports_ansi, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "enable_ansi"), zif_Io_Terminal_enable_ansi, arginfo_Io_Terminal_enable_ansi, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "get_size"), zif_Io_Terminal_get_size, arginfo_Io_Terminal_get_size, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "get_width"), zif_Io_Terminal_get_width, arginfo_Io_Terminal_get_width, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "get_height"), zif_Io_Terminal_get_height, arginfo_Io_Terminal_get_height, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "get_color_depth"), zif_Io_Terminal_get_color_depth, arginfo_Io_Terminal_get_color_depth, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "supports_color"), zif_Io_Terminal_supports_color, arginfo_Io_Terminal_supports_color, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "supports_true_color"), zif_Io_Terminal_supports_true_color, arginfo_Io_Terminal_supports_true_color, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "set_title"), zif_Io_Terminal_set_title, arginfo_Io_Terminal_set_title, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "beep"), zif_Io_Terminal_beep, arginfo_Io_Terminal_beep, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "write"), zif_Io_Terminal_write, arginfo_Io_Terminal_write, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "enable_raw_mode"), zif_Io_Terminal_enable_raw_mode, arginfo_Io_Terminal_enable_raw_mode, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "restore_mode"), zif_Io_Terminal_restore_mode, arginfo_Io_Terminal_restore_mode, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "read_key"), zif_Io_Terminal_read_key, arginfo_Io_Terminal_read_key, 0, NULL, NULL)
-	ZEND_RAW_FENTRY(ZEND_NS_NAME("Io\\Terminal", "read_secret"), zif_Io_Terminal_read_secret, arginfo_Io_Terminal_read_secret, 0, NULL, NULL)
-	ZEND_FE_END
-};
-
 static const zend_function_entry class_Io_Terminal_ColorDepth_methods[] = {
 	ZEND_ME(Io_Terminal_ColorDepth, bits, arginfo_class_Io_Terminal_ColorDepth_bits, ZEND_ACC_PUBLIC)
 	ZEND_FE_END
@@ -260,19 +199,26 @@ static const zend_function_entry class_Io_Terminal_ModeToken_methods[] = {
 	ZEND_FE_END
 };
 
+static const zend_function_entry class_Io_Terminal_TerminalSize_methods[] = {
+	ZEND_ME(Io_Terminal_TerminalSize, __construct, arginfo_class_Io_Terminal_TerminalSize___construct, ZEND_ACC_PUBLIC)
+	ZEND_ME(Io_Terminal_TerminalSize, toArray, arginfo_class_Io_Terminal_TerminalSize_toArray, ZEND_ACC_PUBLIC)
+	ZEND_FE_END
+};
+
 static const zend_function_entry class_Io_Terminal_Terminal_methods[] = {
 	ZEND_ME(Io_Terminal_Terminal, __construct, arginfo_class_Io_Terminal_Terminal___construct, ZEND_ACC_PUBLIC)
-	ZEND_ME(Io_Terminal_Terminal, stdin, arginfo_class_Io_Terminal_Terminal_stdin, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
-	ZEND_ME(Io_Terminal_Terminal, stdout, arginfo_class_Io_Terminal_Terminal_stdout, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
-	ZEND_ME(Io_Terminal_Terminal, stderr, arginfo_class_Io_Terminal_Terminal_stderr, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Io_Terminal_Terminal, create, arginfo_class_Io_Terminal_Terminal_create, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Io_Terminal_Terminal, open, arginfo_class_Io_Terminal_Terminal_open, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Io_Terminal_Terminal, fromStreams, arginfo_class_Io_Terminal_Terminal_fromStreams, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Io_Terminal_Terminal, fromStream, arginfo_class_Io_Terminal_Terminal_fromStream, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
 	ZEND_ME(Io_Terminal_Terminal, getBackend, arginfo_class_Io_Terminal_Terminal_getBackend, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+	ZEND_ME(Io_Terminal_Terminal, getInputStream, arginfo_class_Io_Terminal_Terminal_getInputStream, ZEND_ACC_PUBLIC)
+	ZEND_ME(Io_Terminal_Terminal, getOutputStream, arginfo_class_Io_Terminal_Terminal_getOutputStream, ZEND_ACC_PUBLIC)
 	ZEND_ME(Io_Terminal_Terminal, getStream, arginfo_class_Io_Terminal_Terminal_getStream, ZEND_ACC_PUBLIC)
 	ZEND_ME(Io_Terminal_Terminal, isTty, arginfo_class_Io_Terminal_Terminal_isTty, ZEND_ACC_PUBLIC)
 	ZEND_ME(Io_Terminal_Terminal, supportsAnsi, arginfo_class_Io_Terminal_Terminal_supportsAnsi, ZEND_ACC_PUBLIC)
 	ZEND_ME(Io_Terminal_Terminal, enableAnsi, arginfo_class_Io_Terminal_Terminal_enableAnsi, ZEND_ACC_PUBLIC)
 	ZEND_ME(Io_Terminal_Terminal, getSize, arginfo_class_Io_Terminal_Terminal_getSize, ZEND_ACC_PUBLIC)
-	ZEND_ME(Io_Terminal_Terminal, getWidth, arginfo_class_Io_Terminal_Terminal_getWidth, ZEND_ACC_PUBLIC)
-	ZEND_ME(Io_Terminal_Terminal, getHeight, arginfo_class_Io_Terminal_Terminal_getHeight, ZEND_ACC_PUBLIC)
 	ZEND_ME(Io_Terminal_Terminal, getColorDepth, arginfo_class_Io_Terminal_Terminal_getColorDepth, ZEND_ACC_PUBLIC)
 	ZEND_ME(Io_Terminal_Terminal, supportsColor, arginfo_class_Io_Terminal_Terminal_supportsColor, ZEND_ACC_PUBLIC)
 	ZEND_ME(Io_Terminal_Terminal, supportsTrueColor, arginfo_class_Io_Terminal_Terminal_supportsTrueColor, ZEND_ACC_PUBLIC)
@@ -416,6 +362,41 @@ static zend_class_entry *register_class_Io_Terminal_ModeToken(void)
 	INIT_NS_CLASS_ENTRY(ce, "Io\\Terminal", "ModeToken", class_Io_Terminal_ModeToken_methods);
 	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL);
 	zend_register_class_alias("Terminal\\ModeToken", class_entry);
+
+	return class_entry;
+}
+
+static zend_class_entry *register_class_Io_Terminal_TerminalSize(void)
+{
+	zend_class_entry ce, *class_entry;
+
+	INIT_NS_CLASS_ENTRY(ce, "Io\\Terminal", "TerminalSize", class_Io_Terminal_TerminalSize_methods);
+	class_entry = zend_register_internal_class_with_flags(&ce, NULL, ZEND_ACC_FINAL);
+	zend_register_class_alias("Terminal\\TerminalSize", class_entry);
+
+	zval property_cols_default_value;
+	ZVAL_UNDEF(&property_cols_default_value);
+	zend_string *property_cols_name = zend_string_init("cols", sizeof("cols") - 1, 1);
+	zend_declare_typed_property(class_entry, property_cols_name, &property_cols_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_LONG));
+	zend_string_release(property_cols_name);
+
+	zval property_rows_default_value;
+	ZVAL_UNDEF(&property_rows_default_value);
+	zend_string *property_rows_name = zend_string_init("rows", sizeof("rows") - 1, 1);
+	zend_declare_typed_property(class_entry, property_rows_name, &property_rows_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_LONG));
+	zend_string_release(property_rows_name);
+
+	zval property_width_default_value;
+	ZVAL_UNDEF(&property_width_default_value);
+	zend_string *property_width_name = zend_string_init("width", sizeof("width") - 1, 1);
+	zend_declare_typed_property(class_entry, property_width_name, &property_width_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_LONG));
+	zend_string_release(property_width_name);
+
+	zval property_height_default_value;
+	ZVAL_UNDEF(&property_height_default_value);
+	zend_string *property_height_name = zend_string_init("height", sizeof("height") - 1, 1);
+	zend_declare_typed_property(class_entry, property_height_name, &property_height_default_value, ZEND_ACC_PUBLIC|ZEND_ACC_READONLY, NULL, (zend_type) ZEND_TYPE_INIT_MASK(MAY_BE_LONG));
+	zend_string_release(property_height_name);
 
 	return class_entry;
 }

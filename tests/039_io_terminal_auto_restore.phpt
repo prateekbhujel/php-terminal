@@ -35,7 +35,7 @@ $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
 $code = <<<'PHP'
 use Io\Terminal\Terminal;
 
-$term = Terminal::stdin();
+$term = Terminal::open();
 $token = $term->enableRawMode();
 if ($token === false) {
     echo "raw-mode-failed\n";

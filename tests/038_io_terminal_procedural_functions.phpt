@@ -1,5 +1,5 @@
 --TEST--
-Io\Terminal free-standing procedural functions
+Io\Terminal pure OO architecture and TerminalSize value object
 --EXTENSIONS--
 terminal
 --ENV--
@@ -9,35 +9,35 @@ LINES=25
 <?php
 namespace Io\Terminal;
 
-var_dump(get_backend() instanceof Backend);
-var_dump(is_bool(is_tty()));
-var_dump(is_bool(supports_ansi()));
-var_dump(is_bool(enable_ansi()));
+// Verify procedural functions are eliminated (pure OO architecture)
+var_dump(function_exists('Io\Terminal\is_tty'));
+var_dump(function_exists('Io\Terminal\get_size'));
+var_dump(function_exists('Io\Terminal\read_key'));
 
-$size = get_size();
-var_dump(is_array($size) && $size['cols'] === 80 && $size['rows'] === 25);
-var_dump(get_width() === 80);
-var_dump(get_height() === 25);
+// Verify TerminalSize value object
+$size = new TerminalSize(80, 25);
+var_dump($size->cols === 80);
+var_dump($size->rows === 25);
+var_dump($size->width === 80);
+var_dump($size->height === 25);
+var_dump($size->toArray() === ['cols' => 80, 'rows' => 25]);
 
-$depth = get_color_depth();
-var_dump($depth instanceof ColorDepth);
-var_dump(is_bool(supports_true_color()));
-var_dump(is_bool(supports_color(ColorDepth::None)));
-var_dump(is_bool(beep()));
-var_dump(is_bool(set_title('Test Title')));
-
-$stream = fopen('php://temp', 'w+');
-var_dump(write('hello', $stream) === 5);
-rewind($stream);
-var_dump(stream_get_contents($stream) === 'hello');
-fclose($stream);
+// Verify Terminal::fromStreams with input and output
+$in = fopen('php://temp', 'w+');
+$out = fopen('php://temp', 'w+');
+$term = Terminal::fromStreams($in, $out);
+var_dump($term->getInputStream() === $in);
+var_dump($term->getOutputStream() === $out);
+var_dump($term->write('hello') === 5);
+rewind($out);
+var_dump(stream_get_contents($out) === 'hello');
+fclose($in);
+fclose($out);
 ?>
 --EXPECT--
-bool(true)
-bool(true)
-bool(true)
-bool(true)
-bool(true)
+bool(false)
+bool(false)
+bool(false)
 bool(true)
 bool(true)
 bool(true)

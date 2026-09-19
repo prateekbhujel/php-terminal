@@ -80,51 +80,38 @@ namespace Io\Terminal
         private function __construct() {}
     }
 
-    function get_backend(): Backend {}
+    /**
+     * @alias Terminal\TerminalSize
+     */
+    final class TerminalSize
+    {
+        public readonly int $cols;
+        public readonly int $rows;
+        public readonly int $width;
+        public readonly int $height;
 
-    function is_tty(mixed $stream = UNKNOWN): bool {}
+        public function __construct(int $cols, int $rows) {}
 
-    function supports_ansi(mixed $stream = UNKNOWN): bool {}
-
-    function enable_ansi(mixed $stream = UNKNOWN): bool {}
-
-    function get_size(mixed $stream = UNKNOWN): array|false {}
-
-    function get_width(mixed $stream = UNKNOWN): int|false {}
-
-    function get_height(mixed $stream = UNKNOWN): int|false {}
-
-    function get_color_depth(mixed $stream = UNKNOWN): ColorDepth {}
-
-    function supports_color(ColorDepth $depth = UNKNOWN, mixed $stream = UNKNOWN): bool {}
-
-    function supports_true_color(mixed $stream = UNKNOWN): bool {}
-
-    function set_title(string $title, mixed $stream = UNKNOWN): bool {}
-
-    function beep(mixed $stream = UNKNOWN): bool {}
-
-    function write(string $data, mixed $stream = UNKNOWN): int|false {}
-
-    function enable_raw_mode(mixed $stream = UNKNOWN): ModeToken|false {}
-
-    function restore_mode(ModeToken $mode): bool {}
-
-    function read_key(?float $timeout = null, ?float $sequenceTimeout = null, mixed $stream = UNKNOWN): Key|string|false {}
-
-    function read_secret(string $prompt = "", mixed $stream = UNKNOWN): string {}
+        public function toArray(): array {}
+    }
 
     class Terminal
     {
-        public function __construct(mixed $stream = UNKNOWN) {}
+        public function __construct(mixed $input = UNKNOWN, mixed $output = UNKNOWN) {}
 
-        public static function stdin(): Terminal {}
+        public static function create(): Terminal {}
 
-        public static function stdout(): Terminal {}
+        public static function open(): Terminal {}
 
-        public static function stderr(): Terminal {}
+        public static function fromStreams(mixed $input = UNKNOWN, mixed $output = UNKNOWN): Terminal {}
+
+        public static function fromStream(mixed $stream): Terminal {}
 
         public static function getBackend(): Backend {}
+
+        public function getInputStream(): mixed {}
+
+        public function getOutputStream(): mixed {}
 
         public function getStream(): mixed {}
 
@@ -134,11 +121,7 @@ namespace Io\Terminal
 
         public function enableAnsi(): bool {}
 
-        public function getSize(): array|false {}
-
-        public function getWidth(): int|false {}
-
-        public function getHeight(): int|false {}
+        public function getSize(): TerminalSize|false {}
 
         public function getColorDepth(): ColorDepth {}
 
