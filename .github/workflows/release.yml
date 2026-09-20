@@ -25,7 +25,7 @@ jobs:
           import os, pathlib, re
           tag = os.environ['RELEASE_TAG']
           header = pathlib.Path('php_terminal.h').read_text()
-          version = re.search(r'#define PHP_TERMINAL_VERSION "([^"]+)"', header)[1]
+          version = re.search(r'#\s*define PHP_TERMINAL_VERSION "([^"]+)"', header)[1]
           assert tag == 'v' + version, 'Release tag must match the extension version'
           changelog = pathlib.Path('CHANGELOG.md').read_text()
           assert re.search(r'^## ' + re.escape(version) + r' - \d{4}-\d{2}-\d{2}$', changelog, re.M), 'Missing dated release notes'
