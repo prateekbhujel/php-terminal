@@ -12,6 +12,10 @@ var_dump(Terminal::setTitle("Hello\nWorld"));
 var_dump(Terminal::setTitle("Hello\rWorld"));
 var_dump(Terminal::setTitle("Hello\033]0;pwned\007"));
 var_dump(Terminal::setTitle("Hello\x07World"));
+// Any C0 control and DEL are rejected, not only the OSC terminators
+var_dump(Terminal::setTitle("Hello\tWorld"));
+var_dump(Terminal::setTitle("Hello\x00World"));
+var_dump(Terminal::setTitle("Hello\x7fWorld"));
 
 // 2. Setting title on non-TTY stream without ANSI capability returns false
 putenv('NO_COLOR=1');
@@ -21,7 +25,8 @@ var_dump(Terminal::setTitle("My Title", $stream));
 var_dump(Terminal::beep($stream));
 fclose($stream);
 
-// 3. Setting title with ANSI capability emits standard OSC 0 sequence
+// 3. Setting title with ANSI capability emits standard OSC 0 sequence.
+//    Non-ASCII printable bytes in a UTF-8 title are accepted verbatim.
 putenv('NO_COLOR');
 putenv('CLICOLOR_FORCE=1');
 $stream = fopen('php://temp', 'w+');
@@ -29,6 +34,13 @@ var_dump(Terminal::setTitle("CLI Worker [active]", $stream));
 rewind($stream);
 $output = stream_get_contents($stream);
 var_dump($output === "\033]0;CLI Worker [active]\x07");
+fclose($stream);
+
+$stream = fopen('php://temp', 'w+');
+var_dump(Terminal::setTitle("café résumé", $stream));
+rewind($stream);
+$output = stream_get_contents($stream);
+var_dump($output === "\033]0;café résumé\x07");
 fclose($stream);
 
 // 4. Closed stream rejection
@@ -47,6 +59,11 @@ bool(false)
 bool(false)
 bool(false)
 bool(false)
+bool(false)
+bool(false)
+bool(false)
+bool(true)
+bool(true)
 bool(true)
 bool(true)
 closed stream rejected

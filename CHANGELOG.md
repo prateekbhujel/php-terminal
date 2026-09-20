@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Harden `setTitle()` control character filtering: reject all C0 controls and DEL instead of an allow-list of four bytes, closing residual ANSI/OSC escape injection paths.
+
 ## 1.0.0 - 2026-09-20
 
 - First stable release: the documented session API is the compatibility contract for 1.x. Pre-1.0 releases are not maintained.

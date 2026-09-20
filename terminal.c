@@ -2114,10 +2114,13 @@ static bool terminal_stream_set_title(const terminal_stream_target *stream, cons
 	zend_long written;
 	bool success = false;
 
-	/* Reject control characters to prevent ANSI/OSC escape injection */
+	/* Reject control characters to prevent ANSI/OSC escape injection. Any C0
+	 * control can disrupt the terminal, and ESC (0x1b) plus BEL (0x07) are the
+	 * standard OSC string terminators, so the whole C0 range and DEL are
+	 * refused rather than an allow-list of specific bytes. */
 	for (i = 0; i < title_len; i++) {
 		unsigned char c = (unsigned char) title[i];
-		if (c == '\r' || c == '\n' || c == '\033' || c == '\x07') {
+		if (c < 0x20 || c == 0x7f) {
 			return false;
 		}
 	}
