@@ -2,7 +2,6 @@
 Session reads support descriptors beyond select FD_SETSIZE
 --EXTENSIONS--
 terminal
-posix
 --SKIPIF--
 <?php
 if (PHP_OS_FAMILY === 'Windows') {
@@ -29,8 +28,11 @@ foreach ($pipes as $pipe) {
 }
 
 proc_close($process);
-if (!function_exists('posix_getrlimit') || (posix_getrlimit()['soft openfiles'] ?? 0) < 1200) {
-    die("skip requires at least 1200 file descriptors\n");
+$files = [];
+for ($i = 0; $i < 1200; ++$i) {
+    if (!is_resource($files[] = @fopen('/dev/null', 'r'))) {
+        die("skip requires at least 1200 file descriptors\n");
+    }
 }
 ?>
 --FILE--

@@ -6,7 +6,9 @@ if ($php.Count -ne 1 -or $dll.Count -ne 1) {
 }
 $harness = Join-Path $env:RUNNER_TEMP 'TerminalConsoleTests.exe'
 $csc = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-& $csc /nologo /target:exe "/out:$harness" "$PSScriptRoot/ConsoleHarness.cs"
+$source = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot 'ConsoleHarness.cs')).Path
+$fixture = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot 'console.php')).Path
+& $csc /nologo /target:exe "/out:$harness" $source
 if ($LASTEXITCODE -ne 0) { throw 'Console test compilation failed' }
-& $harness $php[0].FullName $dll[0].FullName "$PSScriptRoot/console.php"
+& $harness $php[0].FullName $dll[0].FullName $fixture
 if ($LASTEXITCODE -ne 0) { throw 'Native console tests failed' }
