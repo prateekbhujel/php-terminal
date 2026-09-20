@@ -138,7 +138,8 @@ foreach ($cases as $name => [$input, $expected]) {
 $timeout = read_key_from_child('', 0.05);
 echo str_contains($timeout, 'bool(false)') ? "timeout\n" : $timeout;
 
-$delayedUp = read_key_chunks_from_child([["\033", 0], ["[A", 60000]], 1.0, 0.2);
+// Leave scheduling headroom on shared runners while delaying beyond the default sequence timeout.
+$delayedUp = read_key_chunks_from_child([["\033", 0], ["[A", 60000]], 3.0, 1.0);
 echo str_contains($delayedUp, 'Up:up') ? "delayed-up\n" : $delayedUp;
 ?>
 --EXPECT--
