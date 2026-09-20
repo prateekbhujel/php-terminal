@@ -1,5 +1,5 @@
 --TEST--
-Io\Terminal\Terminal instance auto-restores raw mode on destruction
+Io\Terminal\Terminal restores raw mode on destruction and uncaught exception shutdown
 --EXTENSIONS--
 terminal
 --SKIPIF--
@@ -31,46 +31,32 @@ proc_close($process);
 ?>
 --FILE--
 <?php
-$extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
-$code = <<<'PHP'
-use Io\Terminal\Terminal;
-
-$term = Terminal::open();
+require __DIR__ . '/terminal_pty.inc';
+$child = <<<'PHP'
+$input = fopen('php://fd/3', 'r+');
+$term = Io\Terminal\Terminal::fromStreams($input);
 $token = $term->enableRawMode();
 if ($token === false) {
-    echo "raw-mode-failed\n";
-    exit;
+    throw new LogicException('Cannot enable raw mode');
 }
-
-// Unset both token and instance - should trigger auto-restoration
-unset($token);
-unset($term);
-
-echo "instance-auto-restored\n";
+echo "RAW\n";
 PHP;
-
-$command = escapeshellarg(PHP_BINARY) . ' -n -d extension=' . escapeshellarg($extension) . ' -r ' . escapeshellarg($code);
-$descriptors = [
-    0 => ['pty'],
-    1 => ['pipe', 'w'],
-    2 => ['pipe', 'w'],
-];
-
-$process = proc_open($command, $descriptors, $pipes);
-if (!is_resource($process)) {
-    echo "proc_open failed\n";
-    exit;
+foreach (['unset($term);', "throw new RuntimeException('uncaught');"] as $exit) {
+    [$output, $error, $echo, $status, $restored] = terminal_test_pty($child . $exit, null, true);
+    var_dump(str_contains($output, "RAW\n"), $restored, $echo === '');
+    if ($status === 0) {
+        var_dump($error === '');
+    } else {
+        var_dump($status === 255 && str_contains($output . $error, 'Uncaught RuntimeException: uncaught'));
+    }
 }
-
-$output = stream_get_contents($pipes[1]);
-$error = stream_get_contents($pipes[2]);
-
-foreach ($pipes as $pipe) {
-    fclose($pipe);
-}
-
-$status = proc_close($process);
-echo $status === 0 && $error === '' ? $output : $output . $error;
 ?>
 --EXPECT--
-instance-auto-restored
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)

@@ -29,7 +29,7 @@ function terminal_test_mode($input): string
 }
 
 /** Run with a custom TTY at fd 3 and unrelated, non-terminal process stdin. */
-function terminal_test_pty(string $code, ?string $input): array
+function terminal_test_pty(string $code, ?string $input, bool $checkRestoration = false): array
 {
     $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
     $code = 'require ' . var_export(__FILE__, true) . '; fgets(STDIN);' . $code;
@@ -65,9 +65,10 @@ function terminal_test_pty(string $code, ?string $input): array
     $output .= stream_get_contents($pipes[1]);
     $error .= stream_get_contents($pipes[2]);
     $echo .= terminal_test_read_pty($pipes[3]);
+    $restored = !$checkRestoration || $before === terminal_test_mode($pipes[3]);
     foreach ($pipes as $pipe) {
         fclose($pipe);
     }
     proc_close($process);
-    return [str_replace("READY\n", '', $output), $error, $echo, $status['exitcode']];
+    return [str_replace("READY\n", '', $output), $error, $echo, $status['exitcode'], $restored];
 }

@@ -25,7 +25,7 @@ Created and maintained by Pratik Bhujel.
 
 Current release: `v0.9.0`.
 
-`v0.9.0` aligns with core PHP API standards following review by Tim Düsterhus: unifying input/output streams into a cohesive `Terminal` session (`open()`, `create()`, `fromStreams()`), removing duplicate procedural functions to enforce RAII lifecycle safety, and adding the `Io\Terminal\TerminalSize` value object for dimensions. The `Terminal\*` legacy facade and aliases remain available.
+`v0.9.0` adopted API changes following feedback from Tim Düsterhus: unifying input/output streams into a cohesive `Terminal` session (`open()`, `create()`, `fromStreams()`), removing duplicate procedural functions and retaining automatic cleanup, and adding the `Io\Terminal\TerminalSize` value object for dimensions. The `Terminal\*` legacy facade and aliases remain available.
 
 ## Install
 
@@ -73,13 +73,13 @@ This extension stays narrower:
 
 ### 1. Object-Oriented Instance API (`Io\Terminal\Terminal`)
 
-Encapsulates a unified interactive terminal session and guarantees terminal state restoration when instances go out of scope:
+A session owns its raw-mode state and restores it during normal destruction:
 
 ```php
 use Io\Terminal\Terminal;
 use Io\Terminal\Key;
 
-// Open default controlling terminal session
+// Use standard input and standard output
 $term = Terminal::open(); // or Terminal::create()
 $token = $term->enableRawMode();
 
@@ -89,7 +89,7 @@ if ($key === Key::Up) {
     // handled
 }
 
-// Automatically restored when $term or $token is destroyed, or explicitly:
+// Restored when $term is destroyed, or explicitly:
 $term->restoreMode();
 ```
 
@@ -250,7 +250,7 @@ extension=terminal
 extension=php_terminal.dll
 ```
 
-## Installing v0.6.0
+## Installing v0.9.0
 
 Install with PIE:
 
@@ -258,9 +258,9 @@ Install with PIE:
 pie install prateekbhujel/php-terminal
 ```
 
-The `v0.6.0` release is available at:
+The `v0.9.0` release is available at:
 
-https://github.com/prateekbhujel/php-terminal/releases/tag/v0.6.0
+https://github.com/prateekbhujel/php-terminal/releases/tag/v0.9.0
 
 Windows builds are attached for PHP 8.2-8.5, x64, TS/NTS. These are native Windows builds for normal Windows PHP runtimes, not WSL. Pick the zip that matches your PHP version and thread-safety mode, copy `php_terminal.dll` into your PHP extension directory, and enable it with:
 
@@ -273,7 +273,7 @@ Build from source on Unix-like systems:
 ```sh
 git clone https://github.com/prateekbhujel/php-terminal.git
 cd php-terminal
-git checkout v0.6.0
+git checkout v0.9.0
 phpize
 ./configure
 make
@@ -291,7 +291,7 @@ For installed builds, use your normal `extension=terminal` configuration instead
 
 ### Build current main from source
 
-To test unreleased changes after `v0.6.0`:
+To test unreleased changes after `v0.9.0`:
 
 ```sh
 phpize
@@ -330,9 +330,9 @@ set PHP_BIN=C:\xampp\php\php.exe
 
 Download the matching zip from the release page. For example:
 
-- PHP 8.2, thread safety disabled: `php_terminal-v0.6.0-8.2-nts-vs16-x86_64.zip`
-- PHP 8.2, thread safety enabled: `php_terminal-v0.6.0-8.2-ts-vs16-x86_64.zip`
-- PHP 8.4, thread safety disabled: `php_terminal-v0.6.0-8.4-nts-vs17-x86_64.zip`
+- PHP 8.2, thread safety disabled: `php_terminal-v0.9.0-8.2-nts-vs16-x86_64.zip`
+- PHP 8.2, thread safety enabled: `php_terminal-v0.9.0-8.2-ts-vs16-x86_64.zip`
+- PHP 8.4, thread safety disabled: `php_terminal-v0.9.0-8.4-nts-vs17-x86_64.zip`
 
 Copy `php_terminal.dll` into that PHP installation's extension directory, for example:
 
@@ -468,7 +468,7 @@ Until Laravel Prompts has that adapter, existing Laravel Prompts releases will s
 
 The bundled `examples/prompt.php` file is intentionally small so framework authors can see the shape without reading a full TUI library.
 
-Future Laravel Prompts adapter work should target the `Terminal\Terminal` API from `v0.6.0`.
+New integrations should use the `Io\Terminal\Terminal` session API and require the version whose behavior they depend on.
 
 For release feedback, open a new issue with the OS, terminal, PHP version, extension version, what you tried, and the behavior you expected.
 

@@ -22,7 +22,7 @@ $ansiAfter = Terminal::supportsAnsi();
 
 echo "terminal doctor\n";
 echo "version: {$version}\n";
-echo "backend: " . Terminal::getBackend()->value . "\n";
+echo "backend: " . Terminal::getBackend()->name . "\n";
 echo "stdin tty: " . yn(Terminal::isTty(Stream::Stdin)) . "\n";
 echo "stdout tty: " . yn(Terminal::isTty(Stream::Stdout)) . "\n";
 echo "stderr tty: " . yn(Terminal::isTty(Stream::Stderr)) . "\n";
@@ -38,7 +38,7 @@ if (!Terminal::isTty(Stream::Stdin)) {
 
 echo "\nPress any key within 5 seconds: ";
 $key = Terminal::readKey(5);
-echo "\nkey: " . ($key === false ? 'timeout' : ($key instanceof Key ? $key->value : $key)) . "\n";
+echo "\nkey: " . ($key === false ? 'timeout' : ($key instanceof Key ? $key->name : $key)) . "\n";
 
 $secret = Terminal::readSecret("Secret check. Type a value and press Enter: ");
 echo "\nsecret result: " . strlen($secret) . " bytes\n";
