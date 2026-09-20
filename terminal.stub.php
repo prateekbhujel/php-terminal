@@ -103,7 +103,7 @@ namespace Io\Terminal
 
         public static function open(): Terminal {}
 
-        public static function fromStreams(mixed $input = UNKNOWN, mixed $output = UNKNOWN): Terminal {}
+        public static function fromStreams(mixed $input, mixed $output = UNKNOWN): Terminal {}
 
         public static function fromStream(mixed $stream): Terminal {}
 

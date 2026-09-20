@@ -833,71 +833,52 @@ static zend_string *terminal_key_from_virtual_key(WORD key)
 	return NULL;
 }
 
-static zend_string *terminal_key_from_wchar(WCHAR key)
+/* Console key records carry UTF-16 code units. Combine a surrogate pair into
+ * one UTF-8 code point instead of returning two replacement characters. */
+static zend_string *terminal_key_from_wchar(WCHAR key, WCHAR *high_surrogate)
 {
-	char buffer[8];
+	WCHAR units[2];
+	int units_len = 1;
+	char buffer[4];
 	int buffer_len;
 
 	if (key == L'\0') {
 		return NULL;
 	}
-
-	if (key <= 0x7f) {
-		return terminal_key_char((unsigned char) key);
-	}
-
-	buffer_len = WideCharToMultiByte(CP_UTF8, 0, &key, 1, buffer, sizeof(buffer), NULL, NULL);
-	if (buffer_len <= 0) {
+	if (key >= 0xd800 && key <= 0xdbff) {
+		*high_surrogate = key;
 		return NULL;
 	}
-
-	return zend_string_init(buffer, (size_t) buffer_len, false);
+	if (key >= 0xdc00 && key <= 0xdfff) {
+		if (*high_surrogate == 0) {
+			return NULL;
+		}
+		units[0] = *high_surrogate;
+		units[1] = key;
+		units_len = 2;
+	} else {
+		units[0] = key;
+	}
+	*high_surrogate = 0;
+	buffer_len = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, units, units_len, buffer, sizeof(buffer), NULL, NULL);
+	return buffer_len > 0 ? zend_string_init(buffer, (size_t) buffer_len, false) : NULL;
 }
 
-static bool terminal_secret_append_wchar(smart_str *secret, WCHAR key)
-{
-	char buffer[8];
-	int buffer_len;
-
-	if (key == L'\0' || key < L' ') {
-		return true;
-	}
-
-	if (key == 0x7f) {
-		return true;
-	}
-
-	if (key <= 0x7f) {
-		char byte = (char) key;
-		smart_str_appendl(secret, &byte, 1);
-		return true;
-	}
-
-	buffer_len = WideCharToMultiByte(CP_UTF8, 0, &key, 1, buffer, sizeof(buffer), NULL, NULL);
-	if (buffer_len <= 0) {
-		return false;
-	}
-
-	smart_str_appendl(secret, buffer, (size_t) buffer_len);
-
-	return true;
-}
-
-static zend_string *terminal_key_from_input_record(const KEY_EVENT_RECORD *key)
+static zend_string *terminal_key_from_input_record(const KEY_EVENT_RECORD *key, WCHAR *high_surrogate)
 {
 	zend_string *named_key = terminal_key_from_virtual_key(key->wVirtualKeyCode);
-
 	if (named_key != NULL) {
+		*high_surrogate = 0;
 		return named_key;
 	}
-
-	return terminal_key_from_wchar(key->uChar.UnicodeChar);
+	return terminal_key_from_wchar(key->uChar.UnicodeChar, high_surrogate);
 }
 
 static zend_string *terminal_read_stream_key(terminal_native_stream input, php_stream *stream, double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
 {
 	HANDLE handle = input;
 	DWORD mode = 0;
+	WCHAR high_surrogate = 0;
 	DWORD raw_mode;
 	DWORD wait_ms = terminal_timeout_to_wait_ms(timeout, timeout_is_null);
 	ULONGLONG deadline_ms = wait_ms == INFINITE ? 0 : GetTickCount64() + wait_ms;
@@ -946,7 +927,7 @@ static zend_string *terminal_read_stream_key(terminal_native_stream input, php_s
 		}
 
 		if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown) {
-			zend_string *key = terminal_key_from_input_record(&record.Event.KeyEvent);
+			zend_string *key = terminal_key_from_input_record(&record.Event.KeyEvent, &high_surrogate);
 
 			if (key != NULL) {
 				result = key;
@@ -977,6 +958,7 @@ static zend_string *terminal_read_stream_secret(terminal_native_stream input, ph
 {
 	HANDLE handle = input;
 	DWORD mode;
+	WCHAR high_surrogate = 0;
 	DWORD raw_mode;
 	smart_str secret = {0};
 	bool success = false;
@@ -1023,7 +1005,10 @@ static zend_string *terminal_read_stream_secret(terminal_native_stream input, ph
 		}
 
 		if (key->wVirtualKeyCode == VK_BACK) {
-			terminal_buffer_remove_last_utf8_char(&secret);
+			high_surrogate = 0;
+			for (WORD repeat = 0; repeat < key->wRepeatCount; repeat++) {
+				terminal_buffer_remove_last_utf8_char(&secret);
+			}
 			continue;
 		}
 
@@ -1031,9 +1016,14 @@ static zend_string *terminal_read_stream_secret(terminal_native_stream input, ph
 			break;
 		}
 
-		if (!terminal_secret_append_wchar(&secret, key->uChar.UnicodeChar)) {
-			failed = true;
-			break;
+		if (key->uChar.UnicodeChar >= 0x20 && key->uChar.UnicodeChar != 0x7f) {
+			zend_string *character = terminal_key_from_wchar(key->uChar.UnicodeChar, &high_surrogate);
+			if (character != NULL) {
+				for (WORD repeat = 0; repeat < key->wRepeatCount; repeat++) {
+					smart_str_append(&secret, character);
+				}
+				zend_string_release(character);
+			}
 		}
 	}
 
@@ -2031,14 +2021,7 @@ static bool terminal_stream_target_init(
 			target->native_stream = terminal_native_stream_from_id(target->enum_id);
 			return true;
 		}
-		if (terminal_terminal_ce && instanceof_function(Z_OBJCE_P(stream_arg), terminal_terminal_ce)) {
-			terminal_object *term_obj = terminal_from_obj(Z_OBJ_P(stream_arg));
-			zval *stream_val = (default_stream == TERMINAL_STREAM_STDIN) ? &term_obj->input_stream_val : &term_obj->output_stream_val;
-			if (!Z_ISUNDEF_P(stream_val)) {
-				return terminal_stream_target_init(stream_val, default_stream, arg_num, target);
-			}
-			return true;
-		}
+
 	}
 
 	if (Z_TYPE_P(stream_arg) == IS_RESOURCE) {
@@ -2533,12 +2516,20 @@ static void terminal_do_read_secret(zval *stream_arg, zval *output_arg, zend_str
 		success = output.php_stream != NULL
 			? terminal_php_stream_write_all(output.php_stream, ZSTR_VAL(prompt), ZSTR_LEN(prompt), &written)
 			: terminal_stream_write(output.native_stream, ZSTR_VAL(prompt), ZSTR_LEN(prompt), &written);
+		if (EG(exception)) {
+			RETURN_THROWS();
+		}
 		if (!success) {
 			zend_throw_exception(spl_ce_RuntimeException, "Unable to write secret prompt", 0);
 			RETURN_THROWS();
 		}
 	}
 
+	/* Writing through a PHP stream may invoke user code. Revalidate input afterwards. */
+	if (prompt != NULL && ZSTR_LEN(prompt) > 0
+		&& !terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDIN, stream_arg_num, &stream)) {
+		RETURN_THROWS();
+	}
 	secret = terminal_read_stream_secret(stream.native_stream, stream.php_stream);
 	if (secret != NULL) {
 		RETURN_STR(secret);
@@ -2602,6 +2593,11 @@ ZEND_METHOD(Io_Terminal_Terminal, __construct)
 	ZEND_PARSE_PARAMETERS_END();
 
 	terminal_object *intern = Z_TERMINAL_P(ZEND_THIS);
+
+	if (!Z_ISUNDEF(intern->input_stream_val)) {
+		zend_throw_error(NULL, "Terminal is already initialized");
+		RETURN_THROWS();
+	}
 
 	if (input_arg != NULL && !Z_ISUNDEF_P(input_arg) && Z_TYPE_P(input_arg) != IS_NULL) {
 		terminal_stream_target target;
@@ -2853,6 +2849,14 @@ ZEND_METHOD(Io_Terminal_Terminal, enableRawMode)
 	terminal_object *intern;
 	ZEND_PARSE_PARAMETERS_NONE();
 	intern = Z_TERMINAL_P(ZEND_THIS);
+	if (intern->active_mode_token != NULL) {
+		terminal_mode_token_object *mode = terminal_mode_token_from_obj(intern->active_mode_token);
+		if (mode->valid) {
+			RETURN_OBJ_COPY(intern->active_mode_token);
+		}
+		OBJ_RELEASE(intern->active_mode_token);
+		intern->active_mode_token = NULL;
+	}
 	terminal_do_enable_raw_mode(&intern->input_stream_val, 0, return_value);
 
 	if (Z_TYPE_P(return_value) == IS_OBJECT && instanceof_function(Z_OBJCE_P(return_value), terminal_mode_token_ce)) {
@@ -2878,7 +2882,7 @@ ZEND_METHOD(Io_Terminal_Terminal, restoreMode)
 
 	if (mode_token != NULL && !Z_ISNULL_P(mode_token)) {
 		terminal_do_restore_mode(mode_token, 1, return_value);
-		if (intern->active_mode_token != NULL && intern->active_mode_token == Z_OBJ_P(mode_token)) {
+		if (Z_TYPE_P(return_value) == IS_TRUE && intern->active_mode_token != NULL && intern->active_mode_token == Z_OBJ_P(mode_token)) {
 			OBJ_RELEASE(intern->active_mode_token);
 			intern->active_mode_token = NULL;
 		}
@@ -2889,8 +2893,10 @@ ZEND_METHOD(Io_Terminal_Terminal, restoreMode)
 		zval token_zv;
 		ZVAL_OBJ(&token_zv, intern->active_mode_token);
 		terminal_do_restore_mode(&token_zv, 1, return_value);
-		OBJ_RELEASE(intern->active_mode_token);
-		intern->active_mode_token = NULL;
+		if (Z_TYPE_P(return_value) == IS_TRUE) {
+			OBJ_RELEASE(intern->active_mode_token);
+			intern->active_mode_token = NULL;
+		}
 		return;
 	}
 

@@ -1,5 +1,16 @@
 <?php
 
+function terminal_test_read_pty($stream): string
+{
+    // Linux reports EIO when the last slave closes; other read errors remain visible.
+    set_error_handler(static fn ($severity, $message) => str_contains($message, 'errno=5 '));
+    try {
+        return (string) stream_get_contents($stream);
+    } finally {
+        restore_error_handler();
+    }
+}
+
 function terminal_test_mode($input): string
 {
     $process = proc_open(['stty', '-g'], [0 => $input, 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
@@ -36,7 +47,7 @@ function terminal_test_pty(string $code, ?string $input): array
     do {
         $output .= stream_get_contents($pipes[1]);
         $error .= stream_get_contents($pipes[2]);
-        $echo .= stream_get_contents($pipes[3]);
+        $echo .= terminal_test_read_pty($pipes[3]);
         if (!$sent && $input !== null && str_contains($output, "READY\n") && terminal_test_mode($pipes[3]) !== $before) {
             fwrite($pipes[3], $input);
             $sent = true;
@@ -53,7 +64,7 @@ function terminal_test_pty(string $code, ?string $input): array
     }
     $output .= stream_get_contents($pipes[1]);
     $error .= stream_get_contents($pipes[2]);
-    $echo .= stream_get_contents($pipes[3]);
+    $echo .= terminal_test_read_pty($pipes[3]);
     foreach ($pipes as $pipe) {
         fclose($pipe);
     }

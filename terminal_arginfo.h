@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 1f169f04cbba1b5c7a42ff87c74d579e1af1ed77 */
+ * Stub hash: e72cd5162435c5ff36d8a1d982929d97deca397f */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Io_Terminal_ColorDepth_bits, 0, 0, IS_LONG, 0)
 ZEND_END_ARG_INFO()
@@ -25,7 +25,7 @@ ZEND_END_ARG_INFO()
 
 #define arginfo_class_Io_Terminal_Terminal_open arginfo_class_Io_Terminal_Terminal_create
 
-ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Io_Terminal_Terminal_fromStreams, 0, 0, Io\\Terminal\\Terminal, 0)
+ZEND_BEGIN_ARG_WITH_RETURN_OBJ_INFO_EX(arginfo_class_Io_Terminal_Terminal_fromStreams, 0, 1, Io\\Terminal\\Terminal, 0)
 	ZEND_ARG_TYPE_INFO(0, input, IS_MIXED, 0)
 	ZEND_ARG_TYPE_INFO(0, output, IS_MIXED, 0)
 ZEND_END_ARG_INFO()

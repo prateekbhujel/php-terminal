@@ -50,6 +50,7 @@ jobs:
         with:
           php-version: ${{ matrix.php-version }}
           coverage: none
+          extensions: posix
 
       - name: Prepare build
         run: |
@@ -99,3 +100,7 @@ jobs:
           arch: ${{ matrix.arch }}
           ts: ${{ matrix.ts }}
           args: --enable-terminal
+
+      - name: Exercise native Windows console input and restoration
+        shell: pwsh
+        run: ./tests/windows/run.ps1

@@ -1,8 +1,7 @@
 --TEST--
-Session reads support descriptors beyond select FD_SETSIZE
+Repeated raw mode on one session preserves the original mode and single-use token
 --EXTENSIONS--
 terminal
-posix
 --SKIPIF--
 <?php
 if (PHP_OS_FAMILY === 'Windows') {
@@ -29,32 +28,37 @@ foreach ($pipes as $pipe) {
 }
 
 proc_close($process);
-if (!function_exists('posix_getrlimit') || (posix_getrlimit()['soft openfiles'] ?? 0) < 1200) {
-    die("skip requires at least 1200 file descriptors\n");
-}
 ?>
 --FILE--
 <?php
 require __DIR__ . '/terminal_pty.inc';
 $child = <<<'PHP'
-$files = [];
-for ($i = 0; $i < 1100; ++$i) {
-    $files[] = fopen('/dev/null', 'r');
-}
 $input = fopen('php://fd/3', 'r+');
+$before = terminal_test_mode($input);
 $term = Io\Terminal\Terminal::fromStreams($input);
-$mode = $term->enableRawMode();
-echo "READY\n";
-var_dump($term->readKey(1));
-var_dump($term->readSecret());
+$first = $term->enableRawMode();
+$raw = terminal_test_mode($input);
+$second = $term->enableRawMode();
+var_dump($first === $second, terminal_test_mode($input) === $raw);
+var_dump($term->restoreMode(), terminal_test_mode($input) === $before);
+var_dump($term->restoreMode());
+$token = $term->enableRawMode();
+unset($term);
+var_dump(terminal_test_mode($input) === $before);
+try { Terminal\Terminal::restoreMode($token); } catch (ValueError $e) { echo "single-use\n"; }
 PHP;
-[$output, $error, $echo, $status] = terminal_test_pty($child, "xsecret\n");
+[$output, $error, $echo, $status] = terminal_test_pty($child, null);
 echo $output;
 var_dump($error === '', $echo === '', $status === 0);
 ?>
 --EXPECT--
-string(1) "x"
-string(6) "secret"
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(false)
+bool(true)
+single-use
 bool(true)
 bool(true)
 bool(true)

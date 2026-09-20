@@ -2,6 +2,11 @@
 
 ## 1.0.0 - Unreleased
 
+- Preserve the original mode across repeated `enableRawMode()` calls on one session; retain restoration state when an explicit restore fails.
+- Reject reinitializing a live session and passing another Terminal object as a stream; correct `fromStreams()` reflection metadata.
+- Revalidate input after user-defined prompt output callbacks.
+- Decode Windows UTF-16 surrogate pairs as one UTF-8 code point and honor repeated characters/backspaces during secret input.
+
 - Read keys and secrets from the configured session input on POSIX and Windows.
 - Preserve pending PHP input bytes on POSIX and the configured handle's mode on Windows.
 - Make hidden input silent: no masks, backspace output, or automatic newline. Explicit prompts use the configured output stream.

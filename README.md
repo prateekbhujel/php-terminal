@@ -133,6 +133,14 @@ including when an outer raw-mode token is active; a failed restore is itself
 reported as an operational failure. The legacy facade uses the
 same hidden-input behavior.
 
+Repeated `enableRawMode()` calls on the same session return its active token;
+`restoreMode()` restores the mode from the first call. Use one session to own
+raw mode for a terminal. If independently created sessions or native code change
+the same terminal's mode, coordinate their lifetimes and restore in reverse order.
+Automatic cleanup covers normal PHP destruction and shutdown; it cannot run after
+an uncatchable process kill or a runtime crash. Keep resource-backed input open
+until its mode has been restored.
+
 On POSIX, bytes already buffered by PHP are consumed before native reads.
 Windows console input uses key events; mixing PHP byte reads with native event
 reads on the same input is unsupported and pending PHP-buffered bytes cause the
