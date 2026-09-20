@@ -60,7 +60,8 @@ jobs:
         run: make -j2
 
       - name: Verify extension loads
-        run: php -n -d extension="$PWD/modules/terminal.so" -r 'exit(extension_loaded("terminal") ? 0 : 1);'
+        run: |
+          php -n -d extension="$PWD/modules/terminal.so" -r 'exit(extension_loaded("terminal") ? 0 : 1);'
 
       - name: Test
         run: |
@@ -69,7 +70,7 @@ jobs:
 
       - name: Upload failing test evidence
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: phpt-${{ matrix.os }}-${{ matrix.php-version }}
           path: |
@@ -92,7 +93,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build extension
-        uses: php/php-windows-builder/extension@v1
+        uses: php/php-windows-builder/extension@7e62efa601b7387f96303e4e636f1655e1682cd6 # v1
         with:
           php-version: ${{ matrix.php-version }}
           arch: ${{ matrix.arch }}
