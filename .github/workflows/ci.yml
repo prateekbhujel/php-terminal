@@ -81,6 +81,37 @@ jobs:
             config.log
           retention-days: 7
 
+  memory:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.4'
+          coverage: none
+      - name: Install Valgrind
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+      - name: Build
+        run: |
+          phpize
+          CFLAGS="-O0 -g -Wall -Wextra" ./configure
+          make -j2
+      - name: Check resource and callback lifetimes
+        env:
+          USE_ZEND_ALLOC: '0'
+        run: make test REPORT_EXIT_STATUS=1 NO_INTERACTION=1 TESTS="-m --show-diff tests/021_stream_resources.phpt tests/043_session_invalid_input.phpt tests/046_session_lifecycle.phpt tests/047_secret_prompt_callback.phpt"
+      - name: Upload memory diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: valgrind
+          path: |
+            tests/**/*.mem
+            tests/**/*.diff
+            tests/**/*.log
+          retention-days: 7
+
   windows:
     runs-on: windows-2022
     timeout-minutes: 20

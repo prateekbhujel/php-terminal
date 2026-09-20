@@ -25,7 +25,7 @@ Created and maintained by Pratik Bhujel.
 
 Current release: `v0.9.0`.
 
-`v0.9.0` aligns with core PHP API standards following review by Tim Düsterhus: unifying input/output streams into a cohesive `Terminal` session (`open()`, `create()`, `fromStreams()`), removing duplicate procedural functions to enforce RAII lifecycle safety, and adding the `Io\Terminal\TerminalSize` value object for dimensions. Full backward compatibility is preserved via `Terminal\*` legacy facades and aliases.
+`v0.9.0` aligns with core PHP API standards following review by Tim Düsterhus: unifying input/output streams into a cohesive `Terminal` session (`open()`, `create()`, `fromStreams()`), removing duplicate procedural functions to enforce RAII lifecycle safety, and adding the `Io\Terminal\TerminalSize` value object for dimensions. The `Terminal\*` legacy facade and aliases remain available.
 
 ## Install
 
@@ -165,7 +165,9 @@ Returned by `$term->getSize()`:
 
 ### 4. Legacy Facade (`Terminal\Terminal`)
 
-Full backward compatibility is preserved for existing code using the `Terminal\*` namespace:
+The `Terminal\*` namespace remains available as a legacy facade. The unreleased
+1.0 changes to hidden input also apply here: `RuntimeException` replaces `Error`,
+and callers render masks and newlines themselves:
 
 ```php
 use Terminal\Terminal;
