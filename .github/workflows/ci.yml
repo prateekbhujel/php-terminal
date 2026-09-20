@@ -30,6 +30,7 @@ jobs:
         run: composer validate --strict
 
   unix:
+    name: ${{ matrix.os == 'macos-14' && 'macos' || 'unix' }} (${{ matrix.php-version }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     continue-on-error: ${{ matrix.php-version == 'nightly' }}
