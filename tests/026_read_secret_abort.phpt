@@ -1,5 +1,5 @@
 --TEST--
-Terminal\Terminal::readSecret prints a newline and throws on Ctrl-C abort
+Terminal\Terminal::readSecret is silent and throws RuntimeException on Ctrl-C abort
 --EXTENSIONS--
 terminal
 --SKIPIF--
@@ -31,14 +31,6 @@ proc_close($process);
 ?>
 --FILE--
 <?php
-/**
- * Verifies that readSecret() prints a newline to stdout and throws an
- * error when the user presses Ctrl-C (0x03) to abort.
- *
- * The child catches the thrown error, then writes a marker on stdout.
- * If the newline was printed before the error, the marker appears
- * on its own line.
- */
 function read_secret_abort(string $input): string
 {
     $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
@@ -47,7 +39,7 @@ echo "ready\n";
 try {
     $secret = Terminal\Terminal::readSecret('pw: ');
     echo "SECRET:" . $secret . "\n";
-} catch (\Error $e) {
+} catch (\RuntimeException $e) {
     echo "ERROR:" . $e->getMessage() . "\n";
 }
 PHP;
@@ -91,8 +83,8 @@ PHP;
 $output = read_secret_abort("\x03");
 
 echo str_contains($output, 'ERROR:Unable to read secret from terminal') ? "abort-throws\n" : $output;
-echo str_contains($output, "\nERROR:") ? "newline-before-error\n" : "no-newline\n";
+echo $output === "ready\npw: ERROR:Unable to read secret from terminal\n" ? "silent-abort\n" : $output;
 ?>
 --EXPECT--
 abort-throws
-newline-before-error
+silent-abort

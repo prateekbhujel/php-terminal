@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0 - Unreleased
+
+- Read keys and secrets from the configured session input on POSIX and Windows.
+- Preserve pending PHP input bytes on POSIX and the configured handle's mode on Windows.
+- Make hidden input silent: no masks, backspace output, or automatic newline. Explicit prompts use the configured output stream.
+- Throw `RuntimeException` for secret-read cancellation or operational failure instead of `Error`.
+- Preserve the v0.9 session API, unbacked enums, dimensions value object, and automatic mode restoration.
+
 ## 0.9.0 - 2026-09-19
 
 - **Core Alignment Refactor (Tim Düsterhus Review)**:

@@ -118,6 +118,27 @@ Instance methods:
 - `$term->readKey(?float $timeout = null, ?float $sequenceTimeout = null): Key|string|false`
 - `$term->readSecret(string $prompt = ''): string`
 
+`readKey()` and `readSecret()` read the session's configured input stream; they
+never substitute process stdin for a custom stream. Input must be a native TTY
+(or a Windows console input handle). `readKey()` returns `false` on timeout or
+unavailable input. `readSecret()` throws `\RuntimeException` on cancellation
+(Ctrl+C, Ctrl+D, Escape), unavailable input, or an I/O or mode-restoration failure.
+Invalid arguments still produce `\TypeError` or `\ValueError`.
+
+`readSecret()` does not echo characters, masks, backspace sequences, or a newline.
+An explicitly supplied prompt is written to the configured output stream; with
+the default empty prompt it writes nothing. Callers own prompt rendering and
+newlines. Each read restores the previous input mode before return or exception,
+including when an outer raw-mode token is active; a failed restore is itself
+reported as an operational failure. The legacy facade uses the
+same hidden-input behavior.
+
+On POSIX, bytes already buffered by PHP are consumed before native reads.
+Windows console input uses key events; mixing PHP byte reads with native event
+reads on the same input is unsupported and pending PHP-buffered bytes cause the
+read to fail without consuming them.
+
+
 ### 2. Dimension Value Object (`Io\Terminal\TerminalSize`)
 
 Returned by `$term->getSize()`:

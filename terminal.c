@@ -7,10 +7,12 @@
 #include "php.h"
 #include "Zend/zend_smart_str.h"
 #include "Zend/zend_enum.h"
+#include "Zend/zend_exceptions.h"
 #include "main/php_network.h"
 #include "main/php_streams.h"
 #include "ext/standard/basic_functions.h"
 #include "ext/standard/info.h"
+#include "ext/spl/spl_exceptions.h"
 #include "php_terminal.h"
 #include "terminal_arginfo.h"
 
@@ -46,7 +48,6 @@ typedef int terminal_native_stream;
 typedef struct _terminal_saved_mode {
 	char magic[TERMINAL_MODE_TOKEN_MAGIC_LEN];
 	terminal_native_stream stream;
-	bool marks_standard_input;
 #ifdef PHP_WIN32
 	DWORD mode;
 #else
@@ -432,11 +433,6 @@ static bool terminal_no_color_is_set(void)
 	return true;
 }
 
-/* Process-global: Windows has one console per process, so this is
- * inherently shared across ZTS threads. Mark volatile so the compiler
- * does not reorder or cache reads around SetConsoleMode calls. */
-static volatile int terminal_win_stdin_is_raw = 0;
-
 static terminal_native_stream terminal_native_stream_from_id(zend_long stream)
 {
 	switch (stream) {
@@ -700,17 +696,13 @@ static bool terminal_stream_write(terminal_native_stream handle, const char *buf
 	return true;
 }
 
-static DWORD terminal_make_raw_mode(DWORD mode, bool mark_stdin_raw)
+static DWORD terminal_make_raw_mode(DWORD mode)
 {
 	/* ReadConsoleInputW returns key events directly, so VT input is not required here. */
-	if (mark_stdin_raw) {
-		terminal_win_stdin_is_raw = 1;
-	}
-
 	return mode & ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT);
 }
 
-static bool terminal_enable_stream_raw_mode(terminal_native_stream handle, bool marks_standard_input, terminal_saved_mode *saved)
+static bool terminal_enable_stream_raw_mode(terminal_native_stream handle, terminal_saved_mode *saved)
 {
 	DWORD mode;
 	DWORD raw_mode;
@@ -719,19 +711,15 @@ static bool terminal_enable_stream_raw_mode(terminal_native_stream handle, bool 
 		return false;
 	}
 
-	raw_mode = terminal_make_raw_mode(mode, marks_standard_input);
+	raw_mode = terminal_make_raw_mode(mode);
 
 	if (!SetConsoleMode(handle, raw_mode)) {
-		if (marks_standard_input) {
-			terminal_win_stdin_is_raw = 0;
-		}
 		return false;
 	}
 
 	memset(saved, 0, sizeof(*saved));
 	memcpy(saved->magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN);
 	saved->stream = handle;
-	saved->marks_standard_input = marks_standard_input;
 	saved->mode = mode;
 
 	return true;
@@ -741,10 +729,6 @@ static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
 {
 	bool restored = terminal_native_stream_is_valid(saved->stream)
 		&& SetConsoleMode(saved->stream, saved->mode);
-
-	if (restored && saved->marks_standard_input) {
-		terminal_win_stdin_is_raw = 0;
-	}
 
 	return restored;
 }
@@ -910,9 +894,9 @@ static zend_string *terminal_key_from_input_record(const KEY_EVENT_RECORD *key)
 	return terminal_key_from_wchar(key->uChar.UnicodeChar);
 }
 
-static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
+static zend_string *terminal_read_stream_key(terminal_native_stream input, php_stream *stream, double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
 {
-	HANDLE handle = terminal_native_stream_from_id(TERMINAL_STREAM_STDIN);
+	HANDLE handle = input;
 	DWORD mode = 0;
 	DWORD raw_mode;
 	DWORD wait_ms = terminal_timeout_to_wait_ms(timeout, timeout_is_null);
@@ -923,26 +907,21 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 	(void) sequence_timeout;
 	(void) sequence_timeout_is_null;
 
-	if (handle == INVALID_HANDLE_VALUE || handle == NULL) {
+	if (handle == INVALID_HANDLE_VALUE || handle == NULL
+		|| (stream != NULL && stream->writepos > stream->readpos)) {
 		return NULL;
 	}
 
-	/*
-	 * Interactive prompt loops commonly call rawMode() once and readKey()
-	 * many times. When stdin is already raw, read directly so one key read
-	 * cannot restore the console to cooked mode mid-session.
-	 */
-	if (!terminal_win_stdin_is_raw) {
-		if (!GetConsoleMode(handle, &mode)) {
-			return NULL;
-		}
-
-		raw_mode = terminal_make_raw_mode(mode, false);
-		if (raw_mode != mode && !SetConsoleMode(handle, raw_mode)) {
-			return NULL;
-		}
-		mode_changed = raw_mode != mode;
+	/* Preserve the mode of this handle, including an already active raw mode. */
+	if (!GetConsoleMode(handle, &mode)) {
+		return NULL;
 	}
+
+	raw_mode = terminal_make_raw_mode(mode);
+	if (raw_mode != mode && !SetConsoleMode(handle, raw_mode)) {
+		return NULL;
+	}
+	mode_changed = raw_mode != mode;
 
 	for (;;) {
 		INPUT_RECORD record;
@@ -994,9 +973,9 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 	return result;
 }
 
-static zend_string *terminal_read_stdin_secret(void)
+static zend_string *terminal_read_stream_secret(terminal_native_stream input, php_stream *stream)
 {
-	HANDLE handle = terminal_native_stream_from_id(TERMINAL_STREAM_STDIN);
+	HANDLE handle = input;
 	DWORD mode;
 	DWORD raw_mode;
 	smart_str secret = {0};
@@ -1004,11 +983,13 @@ static zend_string *terminal_read_stdin_secret(void)
 	bool failed = false;
 	bool mode_changed = false;
 
-	if (handle == INVALID_HANDLE_VALUE || handle == NULL || !GetConsoleMode(handle, &mode)) {
+	if (handle == INVALID_HANDLE_VALUE || handle == NULL
+		|| (stream != NULL && stream->writepos > stream->readpos)
+		|| !GetConsoleMode(handle, &mode)) {
 		return NULL;
 	}
 
-	raw_mode = terminal_make_raw_mode(mode, false);
+	raw_mode = terminal_make_raw_mode(mode);
 	if (raw_mode != mode && !SetConsoleMode(handle, raw_mode)) {
 		return NULL;
 	}
@@ -1037,41 +1018,22 @@ static zend_string *terminal_read_stdin_secret(void)
 		key = &record.Event.KeyEvent;
 
 		if (key->wVirtualKeyCode == VK_RETURN) {
-			zend_long nl_written;
-
-			terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\n", 1, &nl_written);
 			success = true;
 			break;
 		}
 
 		if (key->wVirtualKeyCode == VK_BACK) {
-			if (terminal_buffer_remove_last_utf8_char(&secret)) {
-				zend_long written;
-
-				terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\b \b", sizeof("\b \b") - 1, &written);
-			}
+			terminal_buffer_remove_last_utf8_char(&secret);
 			continue;
 		}
 
 		if (key->wVirtualKeyCode == VK_ESCAPE || key->uChar.UnicodeChar == 0x03 || key->uChar.UnicodeChar == 0x04) {
-			zend_long nl_written;
-
-			terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\n", 1, &nl_written);
 			break;
 		}
 
-		{
-			size_t before_len = secret.s == NULL ? 0 : ZSTR_LEN(secret.s);
-			zend_long written;
-
-			if (!terminal_secret_append_wchar(&secret, key->uChar.UnicodeChar)) {
-				failed = true;
-				break;
-			}
-
-			if ((secret.s == NULL ? 0 : ZSTR_LEN(secret.s)) > before_len) {
-				terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "*", 1, &written);
-			}
+		if (!terminal_secret_append_wchar(&secret, key->uChar.UnicodeChar)) {
+			failed = true;
+			break;
 		}
 	}
 
@@ -1411,12 +1373,10 @@ static void terminal_make_raw_mode(struct termios *mode)
 	mode->c_cc[VTIME] = 0;
 }
 
-static bool terminal_enable_stream_raw_mode(terminal_native_stream fd, bool marks_standard_input, terminal_saved_mode *saved)
+static bool terminal_enable_stream_raw_mode(terminal_native_stream fd, terminal_saved_mode *saved)
 {
 	struct termios mode;
 	struct termios raw_mode;
-
-	(void) marks_standard_input;
 
 	if (!terminal_native_stream_is_valid(fd) || tcgetattr(fd, &mode) != 0) {
 		return false;
@@ -1490,25 +1450,17 @@ static int terminal_timeout_to_ms(double timeout, bool timeout_is_null)
 
 static int terminal_wait_for_input(int fd, int timeout_ms)
 {
-	fd_set readfds;
-	struct timeval timeout;
-	struct timeval *timeout_ptr = NULL;
-
-	FD_ZERO(&readfds);
-	FD_SET(fd, &readfds);
-
-	if (timeout_ms >= 0) {
-		timeout.tv_sec = timeout_ms / 1000;
-		timeout.tv_usec = (timeout_ms % 1000) * 1000;
-		timeout_ptr = &timeout;
-	}
-
-	return select(fd + 1, &readfds, NULL, NULL, timeout_ptr);
+	return php_pollfd_for_ms(fd, PHP_POLLREADABLE, timeout_ms);
 }
 
-static int terminal_read_byte(int fd, unsigned char *byte, int timeout_ms, bool report_resize)
+static int terminal_read_byte(int fd, php_stream *stream, unsigned char *byte, int timeout_ms, bool report_resize)
 {
 	int64_t deadline_ms = timeout_ms > 0 ? terminal_current_time_ms() + timeout_ms : 0;
+
+	/* Consume bytes PHP has already buffered before waiting on the descriptor. */
+	if (stream != NULL && stream->writepos > stream->readpos) {
+		return php_stream_read(stream, (char *) byte, 1) == 1 ? 1 : -1;
+	}
 
 	for (;;) {
 		int wait_ms = timeout_ms;
@@ -1747,18 +1699,18 @@ static bool terminal_is_csi_final_byte(unsigned char key)
 	return key >= 0x40 && key <= 0x7e;
 }
 
-static zend_string *terminal_key_from_escape_sequence(int fd, int sequence_timeout_ms)
+static zend_string *terminal_key_from_escape_sequence(int fd, php_stream *stream, int sequence_timeout_ms)
 {
 	unsigned char sequence[24];
 	size_t sequence_len = 0;
-	int result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms, false);
+	int result = terminal_read_byte(fd, stream, &sequence[sequence_len++], sequence_timeout_ms, false);
 
 	if (result != 1) {
 		return terminal_key_string("escape");
 	}
 
 	if (sequence[0] == 'O') {
-		result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms, false);
+		result = terminal_read_byte(fd, stream, &sequence[sequence_len++], sequence_timeout_ms, false);
 		if (result != 1) {
 			return terminal_key_string("escape");
 		}
@@ -1771,7 +1723,7 @@ static zend_string *terminal_key_from_escape_sequence(int fd, int sequence_timeo
 	}
 
 	while (sequence_len < sizeof(sequence)) {
-		result = terminal_read_byte(fd, &sequence[sequence_len++], sequence_timeout_ms, false);
+		result = terminal_read_byte(fd, stream, &sequence[sequence_len++], sequence_timeout_ms, false);
 		if (result != 1) {
 			return terminal_key_string("escape");
 		}
@@ -1810,7 +1762,7 @@ static size_t terminal_utf8_sequence_len(unsigned char key)
 	return 1;
 }
 
-static zend_string *terminal_key_from_utf8_sequence(int fd, unsigned char key, int sequence_timeout_ms)
+static zend_string *terminal_key_from_utf8_sequence(int fd, php_stream *stream, unsigned char key, int sequence_timeout_ms)
 {
 	unsigned char sequence[4] = { key };
 	size_t sequence_len = terminal_utf8_sequence_len(key);
@@ -1821,7 +1773,7 @@ static zend_string *terminal_key_from_utf8_sequence(int fd, unsigned char key, i
 	}
 
 	for (i = 1; i < sequence_len; i++) {
-		int result = terminal_read_byte(fd, &sequence[i], sequence_timeout_ms, false);
+		int result = terminal_read_byte(fd, stream, &sequence[i], sequence_timeout_ms, false);
 
 		if (result != 1) {
 			return zend_string_init((const char *) sequence, i, false);
@@ -1835,7 +1787,7 @@ static zend_string *terminal_key_from_utf8_sequence(int fd, unsigned char key, i
 	return zend_string_init((const char *) sequence, sequence_len, false);
 }
 
-static void terminal_secret_append_utf8_sequence(int fd, smart_str *secret, unsigned char key)
+static void terminal_secret_append_utf8_sequence(int fd, php_stream *stream, smart_str *secret, unsigned char key)
 {
 	unsigned char sequence[4] = { key };
 	size_t sequence_len = terminal_utf8_sequence_len(key);
@@ -1847,7 +1799,7 @@ static void terminal_secret_append_utf8_sequence(int fd, smart_str *secret, unsi
 	}
 
 	for (i = 1; i < sequence_len; i++) {
-		int result = terminal_read_byte(fd, &sequence[i], TERMINAL_SEQUENCE_TIMEOUT_MS, false);
+		int result = terminal_read_byte(fd, stream, &sequence[i], TERMINAL_SEQUENCE_TIMEOUT_MS, false);
 
 		if (result != 1) {
 			smart_str_appendl(secret, (const char *) sequence, i);
@@ -1863,7 +1815,7 @@ static void terminal_secret_append_utf8_sequence(int fd, smart_str *secret, unsi
 	smart_str_appendl(secret, (const char *) sequence, sequence_len);
 }
 
-static zend_string *terminal_key_from_byte(int fd, unsigned char key, int sequence_timeout_ms)
+static zend_string *terminal_key_from_byte(int fd, php_stream *stream, unsigned char key, int sequence_timeout_ms)
 {
 	switch (key) {
 		case '\r':
@@ -1875,15 +1827,15 @@ static zend_string *terminal_key_from_byte(int fd, unsigned char key, int sequen
 		case '\b':
 			return terminal_key_string("backspace");
 		case 0x1b:
-			return terminal_key_from_escape_sequence(fd, sequence_timeout_ms);
+			return terminal_key_from_escape_sequence(fd, stream, sequence_timeout_ms);
 		default:
-			return terminal_key_from_utf8_sequence(fd, key, sequence_timeout_ms);
+			return terminal_key_from_utf8_sequence(fd, stream, key, sequence_timeout_ms);
 	}
 }
 
-static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
+static zend_string *terminal_read_stream_key(terminal_native_stream input, php_stream *stream, double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
 {
-	int fd = terminal_native_stream_from_id(TERMINAL_STREAM_STDIN);
+	int fd = input;
 	int timeout_ms = terminal_timeout_to_ms(timeout, timeout_is_null);
 	int sequence_timeout_ms = terminal_sequence_timeout_to_ms(sequence_timeout, sequence_timeout_is_null);
 	struct termios mode;
@@ -1927,11 +1879,11 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 		return NULL;
 	}
 
-	read_result = terminal_read_byte(fd, &key, timeout_ms, true);
+	read_result = terminal_read_byte(fd, stream, &key, timeout_ms, true);
 	if (read_result == TERMINAL_READ_RESIZE) {
 		result = terminal_key_string("resize");
 	} else if (read_result == 1) {
-		result = terminal_key_from_byte(fd, key, sequence_timeout_ms);
+		result = terminal_key_from_byte(fd, stream, key, sequence_timeout_ms);
 	}
 
 	if (mode_changed && tcsetattr(fd, TCSANOW, &mode) != 0) {
@@ -1965,9 +1917,9 @@ static zend_string *terminal_read_stdin_key(double timeout, bool timeout_is_null
 	return result;
 }
 
-static zend_string *terminal_read_stdin_secret(void)
+static zend_string *terminal_read_stream_secret(terminal_native_stream input, php_stream *stream)
 {
-	int fd = terminal_native_stream_from_id(TERMINAL_STREAM_STDIN);
+	int fd = input;
 	struct termios mode;
 	struct termios raw_mode;
 	smart_str secret = {0};
@@ -1990,7 +1942,7 @@ static zend_string *terminal_read_stdin_secret(void)
 		unsigned char key;
 		int result;
 
-		result = terminal_read_byte(fd, &key, -1, false);
+		result = terminal_read_byte(fd, stream, &key, -1, false);
 		if (result != 1) {
 			break;
 		}
@@ -1998,40 +1950,23 @@ static zend_string *terminal_read_stdin_secret(void)
 		switch (key) {
 			case '\r':
 			case '\n':
-			{
-				zend_long nl_written;
-
-				terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\n", 1, &nl_written);
 				success = true;
 				goto restore;
-			}
 			case 0x7f:
 			case '\b':
-				if (terminal_buffer_remove_last_utf8_char(&secret)) {
-					zend_long written;
-
-					terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\b \b", sizeof("\b \b") - 1, &written);
-				}
+				terminal_buffer_remove_last_utf8_char(&secret);
 				break;
 			case 0x03:
 			case 0x04:
-			{
-				zend_long nl_written;
-
-				terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\n", 1, &nl_written);
 				goto restore;
-			}
 			case 0x1b:
 			{
-				zend_string *escape_key = terminal_key_from_escape_sequence(fd, TERMINAL_SEQUENCE_TIMEOUT_MS);
+				zend_string *escape_key = terminal_key_from_escape_sequence(fd, stream, TERMINAL_SEQUENCE_TIMEOUT_MS);
 				bool is_escape = zend_string_equals_literal(escape_key, "escape");
 
 				zend_string_release(escape_key);
 
 				if (is_escape) {
-					zend_long nl_written;
-
-					terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "\n", 1, &nl_written);
 					goto restore;
 				}
 
@@ -2039,13 +1974,7 @@ static zend_string *terminal_read_stdin_secret(void)
 			}
 			default:
 				if (key >= 0x20) {
-					size_t before_len = secret.s == NULL ? 0 : ZSTR_LEN(secret.s);
-					zend_long written;
-
-					terminal_secret_append_utf8_sequence(fd, &secret, key);
-					if ((secret.s == NULL ? 0 : ZSTR_LEN(secret.s)) > before_len) {
-						terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), "*", 1, &written);
-					}
+					terminal_secret_append_utf8_sequence(fd, stream, &secret, key);
 				}
 				break;
 		}
@@ -2506,7 +2435,6 @@ static void terminal_do_enable_raw_mode(zval *stream_arg, uint32_t arg_num, zval
 
 	if (!terminal_enable_stream_raw_mode(
 		stream.native_stream,
-		stream.native_stream == terminal_native_stream_from_id(TERMINAL_STREAM_STDIN),
 		&saved
 	)) {
 		RETURN_FALSE;
@@ -2555,19 +2483,17 @@ static void terminal_do_read_key(zval *stream_arg, double timeout, bool timeout_
 	zend_string *key;
 	zend_object *key_case;
 
-	if (stream_arg != NULL && !Z_ISUNDEF_P(stream_arg) && Z_TYPE_P(stream_arg) != IS_NULL) {
-		if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDIN, stream_arg_num, &stream)) {
-			RETURN_THROWS();
-		}
-		if (stream.is_enum) {
-			terminal_validate_input_stream_or_throw(stream.enum_id, stream_arg_num);
-		}
-		if (EG(exception)) {
-			RETURN_THROWS();
-		}
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDIN, stream_arg_num, &stream)) {
+		RETURN_THROWS();
+	}
+	if (stream.is_enum) {
+		terminal_validate_input_stream_or_throw(stream.enum_id, stream_arg_num);
+	}
+	if (EG(exception)) {
+		RETURN_THROWS();
 	}
 
-	key = terminal_read_stdin_key(timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null);
+	key = terminal_read_stream_key(stream.native_stream, stream.php_stream, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null);
 	if (key == NULL) {
 		RETURN_FALSE;
 	}
@@ -2581,37 +2507,44 @@ static void terminal_do_read_key(zval *stream_arg, double timeout, bool timeout_
 	RETURN_STR(key);
 }
 
-static void terminal_do_read_secret(zval *stream_arg, zend_string *prompt, uint32_t stream_arg_num, zval *return_value)
+static void terminal_do_read_secret(zval *stream_arg, zval *output_arg, zend_string *prompt, uint32_t stream_arg_num, zval *return_value)
 {
 	terminal_stream_target stream;
 	zend_string *secret;
 
-	if (stream_arg != NULL && !Z_ISUNDEF_P(stream_arg) && Z_TYPE_P(stream_arg) != IS_NULL) {
-		if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDIN, stream_arg_num, &stream)) {
-			RETURN_THROWS();
-		}
-		if (stream.is_enum) {
-			terminal_validate_input_stream_or_throw(stream.enum_id, stream_arg_num);
-		}
-		if (EG(exception)) {
-			RETURN_THROWS();
-		}
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDIN, stream_arg_num, &stream)) {
+		RETURN_THROWS();
+	}
+	if (stream.is_enum) {
+		terminal_validate_input_stream_or_throw(stream.enum_id, stream_arg_num);
+	}
+	if (EG(exception)) {
+		RETURN_THROWS();
 	}
 
 	if (prompt != NULL && ZSTR_LEN(prompt) > 0) {
+		terminal_stream_target output;
 		zend_long written;
-		if (!terminal_stream_write(terminal_native_stream_from_id(TERMINAL_STREAM_STDOUT), ZSTR_VAL(prompt), ZSTR_LEN(prompt), &written)) {
-			zend_throw_error(NULL, "Unable to write secret prompt");
+		bool success;
+
+		if (!terminal_stream_target_init(output_arg, TERMINAL_STREAM_STDOUT, 0, &output)) {
+			RETURN_THROWS();
+		}
+		success = output.php_stream != NULL
+			? terminal_php_stream_write_all(output.php_stream, ZSTR_VAL(prompt), ZSTR_LEN(prompt), &written)
+			: terminal_stream_write(output.native_stream, ZSTR_VAL(prompt), ZSTR_LEN(prompt), &written);
+		if (!success) {
+			zend_throw_exception(spl_ce_RuntimeException, "Unable to write secret prompt", 0);
 			RETURN_THROWS();
 		}
 	}
 
-	secret = terminal_read_stdin_secret();
+	secret = terminal_read_stream_secret(stream.native_stream, stream.php_stream);
 	if (secret != NULL) {
 		RETURN_STR(secret);
 	}
 
-	zend_throw_error(NULL, "Unable to read secret from terminal");
+	zend_throw_exception(spl_ce_RuntimeException, "Unable to read secret from terminal", 0);
 	RETURN_THROWS();
 }
 
@@ -3003,10 +2936,10 @@ ZEND_METHOD(Io_Terminal_Terminal, readSecret)
 	ZEND_PARSE_PARAMETERS_END();
 
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_read_secret(&intern->input_stream_val, prompt, 0, return_value);
+	terminal_do_read_secret(&intern->input_stream_val, &intern->output_stream_val, prompt, 0, return_value);
 }
 
-/* Legacy Terminal\Terminal static methods for full backward compatibility */
+/* Legacy Terminal\Terminal static facade */
 
 ZEND_METHOD(Terminal_Terminal, getBackend)
 {
@@ -3219,7 +3152,7 @@ ZEND_METHOD(Terminal_Terminal, readSecret)
 		Z_PARAM_STR(prompt)
 	ZEND_PARSE_PARAMETERS_END();
 
-	terminal_do_read_secret(NULL, prompt, 0, return_value);
+	terminal_do_read_secret(NULL, NULL, prompt, 0, return_value);
 }
 
 PHP_MINIT_FUNCTION(terminal)

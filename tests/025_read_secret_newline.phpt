@@ -1,5 +1,5 @@
 --TEST--
-Terminal\Terminal::readSecret prints a newline after the user presses Enter
+Terminal\Terminal::readSecret leaves newline rendering to the caller
 --EXTENSIONS--
 terminal
 --SKIPIF--
@@ -31,14 +31,6 @@ proc_close($process);
 ?>
 --FILE--
 <?php
-/**
- * Verifies that readSecret() prints a newline to stdout after the user
- * presses Enter, so subsequent output starts on a fresh line.
- *
- * The child writes a marker immediately after readSecret() returns.
- * If the newline was printed, the marker appears on its own line in the
- * captured stdout.
- */
 function read_secret_check_newline(string $input): string
 {
     $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
@@ -88,10 +80,7 @@ PHP;
 
 $output = read_secret_check_newline("test\n");
 
-// The output should contain the newline between the masked input and AFTER.
-// With PTY echo disabled (raw mode), we see: pw: ****\nAFTER\n
-// The \n after **** is what readSecret() prints on Enter.
-echo str_contains($output, "\nAFTER") ? "newline-on-enter\n" : $output;
+echo $output === "ready\npw: AFTER\n" ? "silent-on-enter\n" : $output;
 ?>
 --EXPECT--
-newline-on-enter
+silent-on-enter

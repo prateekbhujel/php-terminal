@@ -1,5 +1,5 @@
 --TEST--
-Terminal\Terminal::readSecret prints a newline and throws on Escape abort
+Terminal\Terminal::readSecret is silent and throws RuntimeException on Escape abort
 --EXTENSIONS--
 terminal
 --SKIPIF--
@@ -31,10 +31,6 @@ proc_close($process);
 ?>
 --FILE--
 <?php
-/**
- * Verifies that readSecret() prints a newline to stdout and throws an
- * error when the user presses Escape (0x1b) to abort.
- */
 function read_secret_abort(string $input): string
 {
     $extension = dirname(__DIR__) . '/modules/terminal.' . PHP_SHLIB_SUFFIX;
@@ -43,7 +39,7 @@ echo "ready\n";
 try {
     $secret = Terminal\Terminal::readSecret('pw: ');
     echo "SECRET:" . $secret . "\n";
-} catch (\Error $e) {
+} catch (\RuntimeException $e) {
     echo "ERROR:" . $e->getMessage() . "\n";
 }
 PHP;
@@ -87,8 +83,8 @@ PHP;
 $output = read_secret_abort("\x1b");
 
 echo str_contains($output, 'ERROR:Unable to read secret from terminal') ? "abort-throws\n" : $output;
-echo str_contains($output, "\nERROR:") ? "newline-before-error\n" : "no-newline\n";
+echo $output === "ready\npw: ERROR:Unable to read secret from terminal\n" ? "silent-abort\n" : $output;
 ?>
 --EXPECT--
 abort-throws
-newline-before-error
+silent-abort
