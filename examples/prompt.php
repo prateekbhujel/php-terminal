@@ -1,16 +1,15 @@
 <?php
 
-use Terminal\Key;
-use Terminal\ModeToken;
-use Terminal\Stream;
-use Terminal\Terminal;
+use Io\Terminal\Key;
+use Io\Terminal\ModeToken;
+use Io\Terminal\Terminal;
 
 if (!extension_loaded('terminal')) {
 	fwrite(STDERR, "terminal extension is not loaded\n");
 	exit(1);
 }
 
-if (!Terminal::isTty(Stream::Stdin)) {
+if (!stream_isatty(STDIN)) {
 	fwrite(STDERR, "stdin is not a terminal\n");
 	exit(1);
 }
@@ -21,54 +20,58 @@ $options = [
 	'Quit',
 ];
 
+$terminal = Terminal::create();
 $selected = 0;
-$useAnsi = Terminal::supportsAnsi();
-$mode = Terminal::enableRawMode();
+$useAnsi = $terminal->enableAnsi();
+$mode = $terminal->enableRawMode();
 
 if (!$mode instanceof ModeToken) {
 	fwrite(STDERR, "could not enable raw mode\n");
 	exit(1);
 }
 
-function render_prompt(array $options, int $selected, bool $useAnsi): void
+function render_prompt(Terminal $terminal, array $options, int $selected, bool $useAnsi): void
 {
 	if ($useAnsi) {
-		Terminal::write("\033[2J\033[H");
+		$terminal->write("\033[2J\033[H");
 	}
 
-	Terminal::write("Pick an action. Use arrows or j/k, then Enter.\n\n");
+	$terminal->write("Pick an action. Use arrows or j/k, then Enter.\n\n");
 
 	foreach ($options as $index => $label) {
 		$prefix = $index === $selected ? '> ' : '  ';
 
 		if ($useAnsi && $index === $selected) {
-			Terminal::write("\033[7m" . $prefix . $label . "\033[0m\n");
+			$terminal->write("\033[7m" . $prefix . $label . "\033[0m\n");
 		} else {
-			Terminal::write($prefix . $label . "\n");
+			$terminal->write($prefix . $label . "\n");
 		}
 	}
 }
 
 try {
-	render_prompt($options, $selected, $useAnsi);
+	render_prompt($terminal, $options, $selected, $useAnsi);
 
 	while (true) {
-		$key = Terminal::readKey();
+		$key = $terminal->readKey();
+		if ($key === false) {
+			throw new RuntimeException('Terminal input is unavailable.');
+		}
 
 		if ($key === Key::Resize) {
-			render_prompt($options, $selected, $useAnsi);
+			render_prompt($terminal, $options, $selected, $useAnsi);
 			continue;
 		}
 
 		if ($key === Key::Up || $key === 'k') {
 			$selected = ($selected + count($options) - 1) % count($options);
-			render_prompt($options, $selected, $useAnsi);
+			render_prompt($terminal, $options, $selected, $useAnsi);
 			continue;
 		}
 
 		if ($key === Key::Down || $key === 'j') {
 			$selected = ($selected + 1) % count($options);
-			render_prompt($options, $selected, $useAnsi);
+			render_prompt($terminal, $options, $selected, $useAnsi);
 			continue;
 		}
 
@@ -76,13 +79,15 @@ try {
 			break;
 		}
 
-		if ($key === Key::Escape || $key === 'q') {
+		if ($key === Key::Escape || $key === 'q' || $key === "\x03" || $key === "\x04") {
 			$selected = count($options) - 1;
 			break;
 		}
 	}
 } finally {
-	Terminal::restoreMode($mode);
+	if (!$terminal->restoreMode()) {
+		throw new RuntimeException('Could not restore terminal mode.');
+	}
 }
 
-Terminal::write("\nSelected: " . $options[$selected] . "\n");
+$terminal->write("\nSelected: " . $options[$selected] . "\n");

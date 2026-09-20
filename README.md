@@ -23,496 +23,223 @@ It exposes the pieces that are awkward to normalize in userland, especially once
 
 Created and maintained by Pratik Bhujel.
 
-Current release: `v0.9.0`.
-
-`v0.9.0` adopted API changes following feedback from Tim Düsterhus: unifying input/output streams into a cohesive `Terminal` session (`open()`, `create()`, `fromStreams()`), removing duplicate procedural functions and retaining automatic cleanup, and adding the `Io\Terminal\TerminalSize` value object for dimensions. The `Terminal\*` legacy facade and aliases remain available.
+Current release: `v1.0.0`.
 
 ## Install
 
 ```sh
-pie install prateekbhujel/php-terminal
+pie install prateekbhujel/php-terminal:^1.0
+php --ri terminal
 ```
 
-Windows DLL builds are attached to each release for PHP 8.2-8.5 in x64 TS/NTS variants.
+For Windows, download the DLL zip matching your PHP version, architecture and
+TS/NTS mode from [the release page](https://github.com/prateekbhujel/php-terminal/releases/tag/v1.0.0).
+Copy `php_terminal.dll` to that PHP installation's extension directory and enable
+`extension=php_terminal.dll` in its `php.ini`. Check the selected runtime with
+`php --ini` and `php -i`; XAMPP, MAMP, Laragon and other distributions each have
+their own PHP configuration.
 
-## Project status
+PHP 8.1 or later is required. CI covers Linux PHP 8.1–8.5, macOS PHP 8.4, and
+Windows x64 PHP 8.2–8.5 in TS/NTS builds. PHP nightly is checked separately and
+is advisory. See [compatibility](docs/compatibility.md) for platform boundaries.
 
-`terminal` is pre-1.0 ecosystem work for PHP CLI tooling. API feedback, terminal compatibility reports, Windows testing, and focused pull requests are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the most useful contribution areas.
-
-## Compatibility
-
-| Area | Current support |
-| --- | --- |
-| PHP | `>=8.1` |
-| Unix-like systems | Linux CI plus POSIX backend support for macOS |
-| Windows | Native x64 TS/NTS builds for PHP 8.2-8.5 |
-| Install path | PIE, Windows release zips, or source builds with `phpize` |
-
-See [docs/compatibility.md](./docs/compatibility.md) for platform boundaries, build notes, and stream-resource behavior.
-
-## Why this exists
-
-PHP already has useful pieces such as `stream_isatty()` and `sapi_windows_vt100_support()`, but there is still no small extension that exposes a shared terminal capability layer across Unix and Windows.
-
-The main goal is native Windows parity for PHP CLI prompts and terminal apps. Users should not need WSL just to get arrow keys, raw mode, terminal size, and safe restore behavior that already work on macOS and Linux.
-
-This also removes two common framework workarounds: spawning `stty`/`mode CON` helpers for terminal state, and bundling a Windows-only helper executable just to read hidden password input.
-
-Older console-oriented extensions took different paths:
-
-- `ncurses` and `termbox` wrap external terminal libraries
-- `php-wcli` is Windows-only
-
-This extension stays narrower:
-
-- no ncurses dependency
-- no framework coupling
-- one user-facing API on both backends
-
-## Current API
-
-### 1. Object-Oriented Instance API (`Io\Terminal\Terminal`)
-
-A session owns its raw-mode state and restores it during normal destruction:
+## A terminal session
 
 ```php
-use Io\Terminal\Terminal;
 use Io\Terminal\Key;
+use Io\Terminal\Terminal;
 
-// Use standard input and standard output
-$term = Terminal::open(); // or Terminal::create()
-$token = $term->enableRawMode();
-
-// Read keys with instant non-canonical single-character responsiveness
-$key = $term->readKey();
-if ($key === Key::Up) {
-    // handled
+$terminal = Terminal::create(); // Standard input and standard output.
+$size = $terminal->getSize();
+if ($size !== false) {
+    echo "{$size->cols} columns, {$size->rows} rows\n";
 }
 
-// Restored when $term is destroyed, or explicitly:
-$term->restoreMode();
+$key = $terminal->readKey(1.0);
+if ($key === Key::Up) {
+    echo "Up\n";
+}
 ```
 
-Constructors:
-- `Terminal::open(): Terminal` — Primary factory constructor for standard terminal session
-- `Terminal::create(): Terminal` — Synonym for `Terminal::open()`
-- `Terminal::fromStreams(mixed $input, mixed $output = null): Terminal` — Custom stream resources
-- `Terminal::fromStream(mixed $stream): Terminal` — Single duplex stream resource
+`Io\Terminal\Terminal` is the API for new integrations. Its public signatures,
+enums and documented behavior are the stable 1.x contract. Compatible additions
+and bug fixes may ship in 1.x; incompatible API changes require a new major
+release. Experimental PHP nightly behavior is outside that compatibility promise.
 
-Instance methods:
-- `$term->getInputStream(): mixed`
-- `$term->getOutputStream(): mixed`
-- `$term->getStream(): mixed`
-- `$term->isTty(): bool`
-- `$term->supportsAnsi(): bool`
-- `$term->enableAnsi(): bool`
-- `$term->getColorDepth(): ColorDepth`
-- `$term->supportsColor(ColorDepth $depth = ColorDepth::Standard): bool`
-- `$term->supportsTrueColor(): bool`
-- `$term->getSize(): TerminalSize|false`
-- `$term->setTitle(string $title): bool`
-- `$term->beep(): bool`
-- `$term->write(string $data): int|false`
-- `$term->enableRawMode(): ModeToken|false`
-- `$term->restoreMode(?ModeToken $mode = null): bool`
-- `$term->readKey(?float $timeout = null, ?float $sequenceTimeout = null): Key|string|false`
-- `$term->readSecret(string $prompt = ''): string`
+The extension supplies terminal operations, not a TUI toolkit. Frameworks must
+opt in; installing it does not automatically change Symfony Console or Laravel
+Prompts. Native input avoids spawning `stty` or bundling a hidden-input executable.
+An RFC for PHP core is planned; this extension remains independently usable.
 
-`readKey()` and `readSecret()` read the session's configured input stream; they
-never substitute process stdin for a custom stream. Input must be a native TTY
-(or a Windows console input handle). `readKey()` returns `false` on timeout or
-unavailable input. `readSecret()` throws `\RuntimeException` on cancellation
-(Ctrl+C, Ctrl+D, Escape), unavailable input, or an I/O or mode-restoration failure.
-Invalid arguments still produce `\TypeError` or `\ValueError`.
-
-`readSecret()` does not echo characters, masks, backspace sequences, or a newline.
-An explicitly supplied prompt is written to the configured output stream; with
-the default empty prompt it writes nothing. Callers own prompt rendering and
-newlines. Each read restores the previous input mode before return or exception,
-including when an outer raw-mode token is active; a failed restore is itself
-reported as an operational failure. The legacy facade uses the
-same hidden-input behavior.
-
-Repeated `enableRawMode()` calls on the same session return its active token;
-`restoreMode()` restores the mode from the first call. Use one session to own
-raw mode for a terminal. If independently created sessions or native code change
-the same terminal's mode, coordinate their lifetimes and restore in reverse order.
-Automatic cleanup covers normal PHP destruction and shutdown; it cannot run after
-an uncatchable process kill or a runtime crash. Keep resource-backed input open
-until its mode has been restored.
-
-On POSIX, bytes already buffered by PHP are consumed before native reads.
-Windows console input uses key events; mixing PHP byte reads with native event
-reads on the same input is unsupported and pending PHP-buffered bytes cause the
-read to fail without consuming them.
-
-
-### 2. Dimension Value Object (`Io\Terminal\TerminalSize`)
-
-Returned by `$term->getSize()`:
-- `$size->cols`: int
-- `$size->rows`: int
-- `$size->width`: int (alias for `cols`)
-- `$size->height`: int (alias for `rows`)
-- `$size->toArray()`: `array{cols: int, rows: int}`
-
-### 3. Enums (`Io\Terminal\*`)
-
-- `Backend`: `Posix`, `Windows`
-- `Stream`: `Stdin`, `Stdout`, `Stderr`
-- `ColorDepth`: `None` (0-bit), `Standard` (4-bit), `Extended` (8-bit), `TrueColor` (24-bit). Helper method: `$depth->bits(): int`.
-- `Key`: `Up`, `Down`, `Left`, `Right`, `Enter`, `Backspace`, `Escape`, `Tab`, `Home`, `End`, `Delete`, `PageUp`, `PageDown`, `Resize`, `F1` through `F12`
-
-### 4. Legacy Facade (`Terminal\Terminal`)
-
-The `Terminal\*` namespace remains available as a legacy facade. The unreleased
-1.0 changes to hidden input also apply here: `RuntimeException` replaces `Error`,
-and callers render masks and newlines themselves:
+## Input and output streams
 
 ```php
-use Terminal\Terminal;
-use Terminal\Key;
-
-$cols = Terminal::getWidth();
-$key = Terminal::readKey();
+$terminal = Terminal::fromStreams(STDIN, STDERR);
+$duplex = Terminal::fromStream($stream);
 ```
 
-Current key input scope:
+- `create()` and its alias `open()` use standard input and standard output. They
+  do not open a separate controlling terminal.
+- `fromStreams($input, $output = null)` uses `$input` for both directions when
+  output is omitted or null. Supply an output explicitly for an input-only stream.
+- `fromStream($stream)` uses one stream for both directions.
+- `new Terminal()` uses standard input/output; with one non-null input, output
+  defaults to that input. Stream values may be PHP resources or `Io\Terminal\Stream`
+  enum cases. `getInputStream()` and `getOutputStream()` return those values;
+  `getStream()` returns the output value on an initialized session.
 
-- normalized keys: arrows, enter, backspace, escape, tab (including Shift+Tab / BackTab `\e[Z`), home, end, delete, page up, page down, resize
-- function keys: F1-F12 on Windows and Unix terminals that emit SS3, CSI, or CSI tilde sequences
-- printable input: returned as a string containing the next encoded code point
-- control bytes such as Ctrl+C: returned as single-byte strings by `readKey()`
-- not normalized yet: modifier combinations and full grapheme clusters
-- unknown POSIX escape sequences: fall back to `Terminal\Key::Escape`
+`readKey()`, `readSecret()` and raw mode operate on input. `isTty()`, dimensions,
+ANSI/color operations, title, bell and writes operate on output. Use
+`stream_isatty($input)` to check a resource used for input.
 
-The earlier procedural API was removed while the project is still pre-1.0 so the extension can track the PHP core discussion more closely.
+Native input requires a TTY descriptor or Windows console input handle. Pipes
+and memory streams are useful outputs but cannot supply native terminal events.
+`write()` and explicit prompts support writable PHP streams, including wrappers.
 
-## Migrating from 0.1.x
-
-The 0.1.x procedural API and `TERMINAL_*` constants were removed in favor of the namespaced class and enum API.
-
-| 0.1.x | 0.6.0 |
-| --- | --- |
-| `terminal_backend()` | `Terminal\Terminal::getBackend()` |
-| `terminal_is_tty(TERMINAL_STDOUT)` | `Terminal\Terminal::isTty(Terminal\Stream::Stdout)` |
-| `terminal_supports_ansi(TERMINAL_STDOUT)` | `Terminal\Terminal::supportsAnsi(Terminal\Stream::Stdout)` |
-| `terminal_enable_ansi(TERMINAL_STDOUT)` | `Terminal\Terminal::enableAnsi(Terminal\Stream::Stdout)` |
-| `terminal_get_size(TERMINAL_STDOUT)` | `Terminal\Terminal::getSize(Terminal\Stream::Stdout)` |
-| `terminal_write($data, TERMINAL_STDOUT)` | `Terminal\Terminal::write($data, Terminal\Stream::Stdout)` |
-| `terminal_enable_raw_mode(TERMINAL_STDIN)` | `Terminal\Terminal::enableRawMode(Terminal\Stream::Stdin)` |
-| `terminal_restore_mode($mode)` | `Terminal\Terminal::restoreMode($mode)` |
-| `terminal_read_key($timeout)` | `Terminal\Terminal::readKey($timeout)` |
-| `terminal_read_secret()` | `Terminal\Terminal::readSecret()` |
-| `TERMINAL_STDIN` | `Terminal\Stream::Stdin` |
-| `TERMINAL_STDOUT` | `Terminal\Stream::Stdout` |
-| `TERMINAL_STDERR` | `Terminal\Stream::Stderr` |
-
-Example:
+## Hidden input
 
 ```php
-use Terminal\Key;
-use Terminal\ModeToken;
-use Terminal\Stream;
-use Terminal\Terminal;
-
-Terminal::enableAnsi(Stream::Stdout);
-
-$mode = Terminal::enableRawMode();
+$terminal = Terminal::fromStreams(STDIN, STDERR);
 try {
-    $key = Terminal::readKey();
+    $secret = $terminal->readSecret('Password: ');
+    $terminal->write("\n");
+    // Use $secret without logging it.
+} catch (\RuntimeException $e) {
+    $terminal->write("\nUnable to read hidden input.\n");
+}
+```
 
-    if ($key === Key::Up) {
-        Terminal::write("up\n");
-    } elseif (is_string($key)) {
-        Terminal::write("typed {$key}\n");
+`readSecret(string $prompt = ''): string` emits no characters, masks, backspace
+sequences or newline. An explicit prompt goes to the session output; an empty
+prompt writes nothing. Empty input returns `''`; whitespace is preserved.
+Backspace removes one encoded code point, not an entire grapheme cluster.
+
+Ctrl+C, Ctrl+D and Escape cancel with `\RuntimeException`. Unavailable input,
+write/read failures and failed mode restoration also raise `\RuntimeException`.
+Invalid arguments and closed resources retain PHP's `\TypeError` / `\ValueError`
+behavior. Exceptions from user-defined stream callbacks propagate unchanged.
+
+Both reads restore the previous input mode before returning, including an outer
+raw mode. A failed restore is reported. On POSIX, pending PHP-buffered bytes are
+consumed first. Windows uses console key events: mixing PHP byte reads with
+native input is unsupported, and pending PHP-buffered bytes cause a read failure.
+
+## Keys and raw mode
+
+`readKey(?float $timeout = null, ?float $sequenceTimeout = null): Key|string|false`
+returns a named key, a printable encoded code point, or `false` on timeout or
+unavailable input. Null timeout blocks; zero polls. On POSIX the default timeout
+between escape/UTF-8 bytes is 25 ms; `sequenceTimeout` adjusts it. Windows uses
+native events and ignores that argument.
+
+Named keys are arrows, Enter, Tab, Backspace, Escape, Home, End, Delete, PageUp,
+PageDown, Resize and F1–F12. Shift+Tab maps to Tab. Other control bytes remain
+strings. Unknown POSIX escape sequences map to Escape. Modifier combinations
+and full grapheme clusters are not normalized.
+
+For a prompt loop, keep one session alive:
+
+```php
+$mode = $terminal->enableRawMode();
+if ($mode === false) {
+    throw new \RuntimeException('Cannot enable raw mode.');
+}
+try {
+    while (($key = $terminal->readKey()) !== false) {
+        if ($key === Key::Enter || $key === Key::Escape || $key === "\x03") {
+            break;
+        }
     }
 } finally {
-    if ($mode instanceof ModeToken) {
-        Terminal::restoreMode($mode);
+    if (!$terminal->restoreMode()) {
+        throw new \RuntimeException('Cannot restore terminal mode.');
     }
 }
 ```
 
-## Enabling the extension
+Repeated `enableRawMode()` calls on one session return its active `ModeToken`.
+`restoreMode(?ModeToken $mode = null): bool` restores the original mode and consumes
+the token. Tokens cannot be cloned, serialized or reused after restoration.
+The session retains its token, so unsetting only the caller's token variable does
+not restore the session. Destruction of the session also attempts restoration,
+even if the caller still holds the token.
 
-After you build and install it, enable it like any normal PHP extension:
+Keep resource-backed input open until restored. Use one owner per terminal;
+independent sessions or other native code must coordinate changes and restore in
+reverse order. Cleanup runs during normal destruction and PHP shutdown, including
+uncaught exceptions, but cannot run after an uncatchable kill or runtime crash.
+Destructor cleanup cannot report restoration failure; use explicit restoration
+when the application must check it. Raw mode preserves output processing.
 
-### Unix-like systems
+## Output capabilities
 
-```ini
-extension=terminal
-```
+| Method | Result |
+| --- | --- |
+| `isTty()` | Whether the output is a terminal |
+| `supportsAnsi()` / `enableAnsi()` | Detect / enable ANSI or Windows VT support |
+| `getSize()` | `TerminalSize` or `false`; positive `COLUMNS` and `LINES` are a fallback |
+| `getColorDepth()` | `ColorDepth::None`, `Standard`, `Extended` or `TrueColor` |
+| `supportsColor(ColorDepth $depth = ColorDepth::Standard)` | Whether that depth is available |
+| `supportsTrueColor()` | Whether 24-bit color is available |
+| `write(string $data)` | Bytes written, or `false` on failure; an unsuccessful write may be partial |
+| `setTitle(string $title)` / `beep()` | Success as a boolean |
 
-### Windows
+`TerminalSize` has readonly `cols` / `rows` and `width` / `height` aliases;
+`toArray()` returns `['cols' => ..., 'rows' => ...]`.
+`Backend`, `Stream`, `ColorDepth` and `Key` are unbacked enums: use `->name`,
+not `->value`. `ColorDepth::bits()` returns 0, 4, 8 or 24.
+`Terminal::getBackend()` returns `Backend::Posix` or `Backend::Windows`.
+See [the stub](terminal.stub.php) for every signature.
 
-```ini
-extension=php_terminal.dll
-```
+## Upgrading to 1.0
 
-## Installing v0.9.0
+This is the first stable API release, with intentional changes from pre-1.0:
 
-Install with PIE:
+- Keys and secrets now read the configured input rather than process stdin.
+- Hidden input is silent. Render masks and newlines in the application if needed.
+- Secret cancellation and operational failure throw `RuntimeException`, replacing
+  `Error`. Update catches accordingly.
+- `fromStreams()` requires an input argument. A live session cannot be
+  reinitialized, and another Terminal object is not a stream argument.
+- Repeated raw-mode entry is idempotent. Explicit restore failures retain state
+  so restoration can be retried while the resource remains valid.
 
-```sh
-pie install prateekbhujel/php-terminal
-```
+The v0.9 session API, unbacked enums and dimensions object remain. Code from
+0.8 or earlier must account for the session and enum changes too. The
+`Terminal\Terminal` static facade and `Terminal\*` aliases remain available;
+its `getSize()` returns an array and its hidden input uses the same 1.0 behavior.
+No fixes are backported to pre-1.0 releases. See [the changelog](CHANGELOG.md).
 
-The `v0.9.0` release is available at:
+## Build from source
 
-https://github.com/prateekbhujel/php-terminal/releases/tag/v0.9.0
-
-Windows builds are attached for PHP 8.2-8.5, x64, TS/NTS. These are native Windows builds for normal Windows PHP runtimes, not WSL. Pick the zip that matches your PHP version and thread-safety mode, copy `php_terminal.dll` into your PHP extension directory, and enable it with:
-
-```ini
-extension=php_terminal.dll
-```
-
-Build from source on Unix-like systems:
-
-```sh
-git clone https://github.com/prateekbhujel/php-terminal.git
-cd php-terminal
-git checkout v0.9.0
-phpize
-./configure
-make
-make test
-```
-
-Then try the stream-resource and prompt examples:
-
-```sh
-php -d extension=modules/terminal.so examples/streams.php
-php -d extension=modules/terminal.so examples/prompt.php
-```
-
-For installed builds, use your normal `extension=terminal` configuration instead of `-d extension=...`.
-
-### Build current main from source
-
-To test unreleased changes after `v0.9.0`:
-
-```sh
-phpize
-./configure
-make
-make test
-```
-
-Then try the stream-resource and prompt examples:
-
-```sh
-php -d extension=modules/terminal.so examples/streams.php
-php -d extension=modules/terminal.so examples/prompt.php
-```
-
-For installed builds, use your normal `extension=terminal` configuration instead of `-d extension=...`.
-
-### Windows PHP distributions
-
-XAMPP, MAMP, WAMP, Laragon, Herd, and plain downloaded PHP builds work as long as the DLL matches the PHP build your app actually runs.
-
-Example PHP binaries:
-
-- XAMPP: `C:\xampp\php\php.exe`
-- MAMP: `C:\MAMP\bin\php\php8.x.x\php.exe`
-- Laragon: `C:\laragon\bin\php\php-8.x.x\php.exe`
-- Plain PHP zip: `C:\php\php.exe`
-
-Check the PHP version, thread-safety mode, architecture, and compiler:
-
-```bat
-set PHP_BIN=C:\xampp\php\php.exe
-%PHP_BIN% -i | findstr /C:"PHP Version" /C:"Thread Safety" /C:"Architecture" /C:"Compiler"
-%PHP_BIN% --ini
-```
-
-Download the matching zip from the release page. For example:
-
-- PHP 8.2, thread safety disabled: `php_terminal-v0.9.0-8.2-nts-vs16-x86_64.zip`
-- PHP 8.2, thread safety enabled: `php_terminal-v0.9.0-8.2-ts-vs16-x86_64.zip`
-- PHP 8.4, thread safety disabled: `php_terminal-v0.9.0-8.4-nts-vs17-x86_64.zip`
-
-Copy `php_terminal.dll` into that PHP installation's extension directory, for example:
-
-```text
-C:\xampp\php\ext
-```
-
-Then edit:
-
-```text
-C:\xampp\php\php.ini
-```
-
-Add:
-
-```ini
-extension=php_terminal.dll
-```
-
-Test it with XAMPP's CLI PHP:
-
-```bat
-%PHP_BIN% -m | findstr terminal
-%PHP_BIN% examples\doctor.php
-%PHP_BIN% examples\prompt.php
-```
-
-Once enabled in that PHP runtime, any CLI app using the same `php.exe` can detect and use `terminal`. The app or framework still needs integration code; the extension provides the native Windows terminal primitives.
-
-### Install into a specific PHP distribution
-
-Each PHP installation has its own extension directory and `php.ini`. Build `terminal` with the `phpize` and `php-config` that belong to the PHP binary your application actually runs.
-
-Example target PHP binaries:
-
-- XAMPP on macOS: `/Applications/XAMPP/xamppfiles/bin/php`
-- MAMP on macOS: `/Applications/MAMP/bin/php/php8.x.x/bin/php`
-- LAMPP/XAMPP on Linux: `/opt/lampp/bin/php`
-- Homebrew or system PHP: `$(command -v php)`
-
-Build for that target PHP:
+Use the `phpize` and `php-config` belonging to the PHP binary that will load the
+extension. Build in a path without spaces.
 
 ```sh
 git clone https://github.com/prateekbhujel/php-terminal.git
 cd php-terminal
-
-PHP_BIN=/Applications/XAMPP/xamppfiles/bin/php
-PHPIZE="$(dirname "${PHP_BIN}")/phpize"
-PHP_CONFIG="$(dirname "${PHP_BIN}")/php-config"
-
-"${PHPIZE}"
-
-if [ "$(uname -s)" = "Darwin" ]; then
-    PHP_ARCH=$("${PHP_BIN}" -r 'echo php_uname("m");')
-    CFLAGS="-arch ${PHP_ARCH}" \
-    LDFLAGS="-arch ${PHP_ARCH}" \
-    ./configure --with-php-config="${PHP_CONFIG}"
-else
-    ./configure --with-php-config="${PHP_CONFIG}"
-fi
-
-make
-make test
+git checkout v1.0.0
+phpize
+./configure --with-php-config="$(command -v php-config)"
+make -j2
+make test REPORT_EXIT_STATUS=1 NO_INTERACTION=1
 sudo make install
 ```
 
-Build from a path without spaces. The PHP extension build tooling rejects
-whitespace in the build path before `configure` runs.
+Enable `extension=terminal.so` in that runtime's `php.ini`, then run
+`php --ri terminal`. On Apple Silicon with an x86_64 PHP distribution, configure
+with `CFLAGS="-arch x86_64" LDFLAGS="-arch x86_64"` to match PHP's architecture.
+Windows source builds use `config.w32` and the PHP SDK; CI uses
+`php/php-windows-builder`.
 
-The macOS architecture step matters on Apple Silicon when a PHP distribution runs as `x86_64` under Rosetta. Without matching that architecture, macOS may build an `arm64` `terminal.so` that the target PHP cannot load.
-
-Find the right `php.ini`:
-
-```sh
-"${PHP_BIN}" --ini
-```
-
-Add this to that PHP installation's loaded `php.ini`:
-
-```ini
-extension=terminal.so
-```
-
-Test it:
+Run an example against a local build:
 
 ```sh
-"${PHP_BIN}" -m | grep terminal
-"${PHP_BIN}" examples/doctor.php
-"${PHP_BIN}" examples/prompt.php
+php -d extension=modules/terminal.so examples/doctor.php
+php -d extension=modules/terminal.so examples/prompt.php
 ```
 
-Once enabled there, any PHP application using that same PHP binary can use `terminal`. If another app uses a different PHP binary, build/install the extension for that PHP too.
-
-## Laravel Prompts and similar tools
-
-The goal is to let Laravel Prompts and similar prompt libraries behave on native Windows the same way they behave on macOS and Linux.
-
-This extension is the native terminal layer for that. It does not monkey-patch Laravel Prompts, Symfony Console, or any other CLI framework by itself. Frameworks still need to opt in, but the hard part is exposed through one API: raw mode, safe terminal restore, single-key reads, terminal size, direct writes, and shared Unix/Windows key names.
-
-That means the end-user path should be: install the matching Windows `php_terminal.dll`, enable it in the PHP used by the app, install or use an adapter that detects `terminal`, then run prompts from PowerShell, Command Prompt, or Windows Terminal without WSL.
-
-A Laravel Prompts adapter would keep Laravel's existing prompt code, but swap the terminal backend when this extension is available:
-
-- use `Terminal\Terminal::isTty(Terminal\Stream::Stdin)` for interactivity checks
-- use `Terminal\Terminal::enableAnsi()` before rendering ANSI prompts on Windows
-- use `Terminal\Terminal::enableRawMode()` and `Terminal\Terminal::restoreMode()` instead of `stty`
-- use `Terminal\Terminal::readKey()` for input
-- use `Terminal\Terminal::readSecret()` for password/secret prompts instead of shelling out to platform-specific helpers
-- map `Terminal\Key::*` cases back to Laravel Prompts' existing `Key::*` values
-- use `Terminal\Terminal::getSize()` for columns and rows
-
-The key mapping is intentionally small and predictable:
-
-| `Terminal\Terminal::readKey()` | Laravel Prompts key |
-| --- | --- |
-| `Terminal\Key::Up` | `Key::UP` |
-| `Terminal\Key::Down` | `Key::DOWN` |
-| `Terminal\Key::Left` | `Key::LEFT` |
-| `Terminal\Key::Right` | `Key::RIGHT` |
-| `Terminal\Key::Enter` | `Key::ENTER` |
-| `Terminal\Key::Backspace` | `Key::BACKSPACE` |
-| `Terminal\Key::Delete` | `Key::DELETE` |
-| `Terminal\Key::Escape` | `Key::ESCAPE` |
-| `Terminal\Key::Tab` | `Key::TAB` |
-| `Terminal\Key::Home` | first `Key::HOME` value |
-| `Terminal\Key::End` | first `Key::END` value |
-| `Terminal\Key::PageUp` | `Key::PAGE_UP` |
-| `Terminal\Key::PageDown` | `Key::PAGE_DOWN` |
-
-Printable input is returned as the typed character, so normal text prompts do not need special handling.
-
-Until Laravel Prompts has that adapter, existing Laravel Prompts releases will still use their current Windows fallback behavior. XAMPP and Windows users can test the same low-level prompt behavior today with `examples/prompt.php`.
-
-The bundled `examples/prompt.php` file is intentionally small so framework authors can see the shape without reading a full TUI library.
-
-New integrations should use the `Io\Terminal\Terminal` session API and require the version whose behavior they depend on.
-
-For release feedback, open a new issue with the OS, terminal, PHP version, extension version, what you tried, and the behavior you expected.
-
-## Build
-
-### Unix-like systems
-
-```sh
-phpize
-./configure
-make
-make test
-```
-
-### Windows
-
-`config.w32` is included, and the CI workflow builds the extension with `php/php-windows-builder`.
-
-## Example
-
-```php
-<?php
-
-if (!extension_loaded('terminal')) {
-    die("terminal is not loaded\n");
-}
-
-use Terminal\Terminal;
-use Terminal\ModeToken;
-
-var_dump(Terminal::getBackend());
-var_dump(Terminal::isTty());
-var_dump(Terminal::supportsAnsi());
-var_dump(Terminal::getSize());
-Terminal::write("hello from terminal\n");
-
-$mode = Terminal::enableRawMode();
-if ($mode instanceof ModeToken) {
-    try {
-        $key = Terminal::readKey(0.5);
-    } finally {
-        Terminal::restoreMode($mode);
-    }
-}
-```
-
-There are runnable examples in [`examples/basic.php`](./examples/basic.php), [`examples/doctor.php`](./examples/doctor.php), [`examples/prompt.php`](./examples/prompt.php), and [`examples/streams.php`](./examples/streams.php).
+[Basic operations](examples/basic.php), [stream output](examples/streams.php),
+[diagnostics](examples/doctor.php) and [a prompt loop](examples/prompt.php) use the
+session API. Read [CONTRIBUTING.md](CONTRIBUTING.md) for tests and bug reports and
+[SECURITY.md](SECURITY.md) for private security reports.

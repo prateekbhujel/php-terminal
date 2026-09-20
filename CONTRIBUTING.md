@@ -1,7 +1,6 @@
 # Contributing
 
-Contributions are welcome while `terminal` is still pre-1.0. The most useful
-help is focused testing and small changes that improve cross-platform terminal
+Contributions are welcome. The most useful help is focused testing and small changes that improve cross-platform terminal
 behavior without turning the extension into a full TUI toolkit.
 
 Good contribution areas:
@@ -48,5 +47,11 @@ with matching architecture flags:
 CFLAGS="-arch x86_64" LDFLAGS="-arch x86_64" ./configure
 ```
 
-Keep pull requests small and focused. If an API shape is uncertain, open an
-issue first so the behavior can be discussed before code lands.
+Keep pull requests small and focused. Preserve the documented 1.x API contract.
+Discuss incompatible changes before implementation; they require a new major
+release. Bug fixes target the current 1.x line.
+
+CI runs PHPTs on Linux and macOS, real Win32 console input tests on Windows,
+and resource/callback tests under Valgrind. Native input tests must verify actual
+output and terminal mode, not just that a call succeeds. Release publication
+depends on the same checks; PHP nightly is advisory.

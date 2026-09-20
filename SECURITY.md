@@ -4,12 +4,13 @@
 outside the streams passed to it, keep terminal modes changed after failures, or
 crash PHP on malformed terminal input.
 
-Supported security fixes target the latest released pre-1.0 line.
+Security fixes target the latest 1.x release. Upgrade from pre-1.0 releases;
+they no longer receive fixes.
 
 | Version | Supported |
 | --- | --- |
-| 0.6.x | Yes |
-| < 0.6 | No |
+| 1.x | Yes |
+| < 1.0 | No |
 
 Please report security-sensitive issues privately by emailing
 prateekbhujelpb@gmail.com. Include the operating system, PHP version, extension

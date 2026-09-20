@@ -21,7 +21,7 @@ The package metadata requires PHP `>=8.1`.
 | Platform | Status |
 | --- | --- |
 | Linux | Tested through the Unix CI build |
-| macOS | Supported through the POSIX backend |
+| macOS | PHP 8.4 tested through the POSIX backend in CI |
 | Windows | Tested through native Windows CI builds for PHP 8.2-8.5, x64, TS/NTS |
 | WSL | Should use the POSIX backend, but the goal is native Windows support without requiring WSL |
 
@@ -41,12 +41,12 @@ Compile with matching architecture flags when the target PHP is `x86_64`.
 
 ## API scope
 
-Stable enough to test against:
+The documented 1.x contract covers:
 
 - TTY detection
 - ANSI/VT support detection and enablement
 - terminal size detection
-- raw mode enable/restore through `Terminal\ModeToken`
+- raw mode enable/restore through `Io\Terminal\ModeToken`
 - key reads for common prompt keys
 - secret input
 - direct writes
@@ -57,13 +57,25 @@ Still intentionally narrow:
 - not a full TUI toolkit
 - no ncurses dependency
 - no framework integration code bundled in this repository
-- no promise yet to preserve every pre-1.0 API detail
+- no support or backports for pre-1.0 releases
+- compatible fixes and additions within 1.x; incompatible API changes require a major release
 
 ## Stream resources
 
-Stream-aware methods accept either `Terminal\Stream` enum cases or PHP stream
-resources. A resource must be backed by a native descriptor or Windows handle.
-Unsupported wrappers return `false` or raise the normal PHP type/resource error.
+Stream-aware methods accept either `Io\Terminal\Stream` enum cases or PHP stream
+resources. Native reads and terminal controls require a TTY descriptor or Windows
+console handle. Writes and explicit prompts also support writable PHP streams,
+including memory streams and wrappers. `readKey()` returns `false` on unavailable
+input; `readSecret()` throws `RuntimeException` on cancellation or operational
+failure. Invalid or closed resources raise the normal PHP type/resource error.
+
+POSIX reads consume PHP-buffered input first. Windows reads console events;
+mixing byte reads and event reads is unsupported. Keep raw-mode input open until
+restored, and coordinate independent sessions targeting the same terminal.
+
+`isTty()`, dimensions and output capabilities refer to session output. Input
+operations use session input. Passing only an input to `fromStreams()` uses that
+stream for output too; provide the second argument when output is separate.
 
 Good candidates:
 
