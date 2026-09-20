@@ -191,6 +191,21 @@ not `->value`. `ColorDepth::bits()` returns 0, 4, 8 or 24.
 `Terminal::getBackend()` returns `Backend::Posix` or `Backend::Windows`.
 See [the stub](terminal.stub.php) for every signature.
 
+## Security
+
+`write()` and the `readSecret()` prompt emit caller-supplied bytes verbatim.
+They are raw output primitives: the extension does not strip or escape control
+bytes. If data reaching them is untrusted (user input echoed back, remote
+content, log lines), the application must neutralize control characters first,
+otherwise an attacker can inject ANSI/OSC sequences and alter the terminal:
+reposition the cursor, hide text, change the window title, or spoof a prompt.
+
+`setTitle()` is the exception: it rejects control characters (the C0 range and
+DEL) before emitting its OSC sequence, so it is safe to call with untrusted
+input. Every other output path is the caller's responsibility.
+
+See [SECURITY.md](SECURITY.md) for private security reports.
+
 ## Upgrading to 1.0
 
 This is the first stable API release, with intentional changes from pre-1.0:

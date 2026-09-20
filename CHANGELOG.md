@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Document the output trust boundary: `write()` and `readSecret()` prompts emit raw bytes, so callers must sanitize untrusted data; `setTitle()` is already sanitized.
+
 ## 1.0.0 - 2026-09-20
 
 - First stable release: the documented session API is the compatibility contract for 1.x. Pre-1.0 releases are not maintained.
