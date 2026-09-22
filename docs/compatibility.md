@@ -30,7 +30,7 @@ The package metadata requires PHP `>=8.1`.
 | Method | Notes |
 | --- | --- |
 | PIE | Preferred install path: `pie install prateekbhujel/php-terminal` |
-| Windows release zip | Use the zip that matches PHP version, architecture, compiler, and thread-safety mode |
+| Windows release zip | x64 only; match PHP version, compiler, and thread-safety mode, then rename the versioned DLL to `php_terminal.dll` |
 | Source build | Use the `phpize` and `php-config` from the PHP binary that will load the extension |
 
 Build from a path without spaces. PHP extension tooling rejects whitespace in
