@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Harden `setTitle()` against control-sequence injection. It now requires valid UTF-8 and rejects C0/C1 controls and DEL.
+
 ## 1.0.0 - 2026-09-20
 
 - First stable release: the documented session API is the compatibility contract for 1.x. Pre-1.0 releases are not maintained.

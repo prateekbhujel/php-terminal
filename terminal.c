@@ -11,6 +11,7 @@
 #include "main/php_network.h"
 #include "main/php_streams.h"
 #include "ext/standard/basic_functions.h"
+#include "ext/standard/html.h"
 #include "ext/standard/info.h"
 #include "ext/spl/spl_exceptions.h"
 #include "php_terminal.h"
@@ -2106,20 +2107,38 @@ static void terminal_validate_input_stream_or_throw(zend_long stream, uint32_t a
 	}
 }
 
+static bool terminal_title_is_safe(const char *title, size_t title_len)
+{
+	const unsigned char *bytes = (const unsigned char *) title;
+	size_t cursor = 0;
+#if PHP_VERSION_ID < 80200
+	int status;
+#else
+	zend_result status;
+#endif
+
+	while (cursor < title_len) {
+		unsigned int codepoint = php_next_utf8_char(bytes, title_len, &cursor, &status);
+
+		if (status != SUCCESS || codepoint < 0x20 || (codepoint >= 0x7f && codepoint <= 0x9f)) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 static bool terminal_stream_set_title(const terminal_stream_target *stream, const char *title, size_t title_len)
 {
-	size_t i;
 	char *buf;
 	size_t buf_len;
 	zend_long written;
 	bool success = false;
 
-	/* Reject control characters to prevent ANSI/OSC escape injection */
-	for (i = 0; i < title_len; i++) {
-		unsigned char c = (unsigned char) title[i];
-		if (c == '\r' || c == '\n' || c == '\033' || c == '\x07') {
-			return false;
-		}
+	/* C0 and C1 controls can terminate or start control strings. Decoding also
+	 * prevents raw 8-bit C1 controls from being passed through as title bytes. */
+	if (!terminal_title_is_safe(title, title_len)) {
+		return false;
 	}
 
 #ifdef PHP_WIN32

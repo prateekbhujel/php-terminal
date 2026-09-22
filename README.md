@@ -184,6 +184,9 @@ when the application must check it. Raw mode preserves output processing.
 | `write(string $data)` | Bytes written, or `false` on failure; an unsuccessful write may be partial |
 | `setTitle(string $title)` / `beep()` | Success as a boolean |
 
+`setTitle()` accepts valid UTF-8 text. It returns `false` without writing when
+the title contains a C0/C1 control character, DEL or malformed UTF-8.
+
 `TerminalSize` has readonly `cols` / `rows` and `width` / `height` aliases;
 `toArray()` returns `['cols' => ..., 'rows' => ...]`.
 `Backend`, `Stream`, `ColorDepth` and `Key` are unbacked enums: use `->name`,
