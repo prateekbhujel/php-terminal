@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Harden `setTitle()` against control-sequence injection. It now requires valid UTF-8 and rejects C0/C1 controls and DEL.
+- Use the Unicode Windows console title API for console outputs so `setTitle()` preserves UTF-8 titles and reports conversion or API failures.
 
 ## 1.0.0 - 2026-09-20
 

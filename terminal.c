@@ -2142,9 +2142,27 @@ static bool terminal_stream_set_title(const terminal_stream_target *stream, cons
 	}
 
 #ifdef PHP_WIN32
-	if (stream->is_enum && terminal_stream_is_tty(stream->native_stream)) {
-		SetConsoleTitleA(title);
-		return true;
+	if (terminal_stream_is_tty(stream->native_stream)) {
+		int wide_len;
+		WCHAR *wide_title;
+
+		if (title_len == 0) {
+			return SetConsoleTitleW(L"") != 0;
+		}
+		if (title_len > INT_MAX || memchr(title, '\0', title_len) != NULL) {
+			return false;
+		}
+		wide_len = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, title, (int) title_len, NULL, 0);
+		if (wide_len == 0) {
+			return false;
+		}
+		wide_title = safe_emalloc((size_t) wide_len + 1, sizeof(WCHAR), 0);
+		if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, title, (int) title_len, wide_title, wide_len) == wide_len) {
+			wide_title[wide_len] = L'\0';
+			success = SetConsoleTitleW(wide_title) != 0;
+		}
+		efree(wide_title);
+		return success;
 	}
 #endif
 
