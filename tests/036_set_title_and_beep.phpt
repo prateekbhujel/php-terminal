@@ -1,23 +1,46 @@
 --TEST--
-Terminal\Terminal::setTitle and Terminal\Terminal::beep behavior and sanitization
+Session and legacy setTitle reject controls without output and preserve UTF-8
 --EXTENSIONS--
 terminal
 --FILE--
 <?php
-use Terminal\Stream;
 use Terminal\Terminal;
 
-// 1. Sanitization: control characters are rejected to prevent escape injection
-var_dump(Terminal::setTitle("Hello\nWorld"));
-var_dump(Terminal::setTitle("Hello\rWorld"));
-var_dump(Terminal::setTitle("Hello\033]0;pwned\007"));
-var_dump(Terminal::setTitle("Hello\x07World"));
-// Any C0 control and DEL are rejected, not only the OSC terminators
-var_dump(Terminal::setTitle("Hello\tWorld"));
-var_dump(Terminal::setTitle("Hello\x00World"));
-var_dump(Terminal::setTitle("Hello\x7fWorld"));
+// Force ANSI so a non-TTY cannot hide a broken control-character filter.
+putenv('NO_COLOR');
+putenv('CLICOLOR_FORCE=1');
+foreach (['session', 'legacy'] as $api) {
+    $stream = fopen('php://temp', 'w+');
+    $session = Io\Terminal\Terminal::fromStreams(Io\Terminal\Stream::Stdin, $stream);
+    $setTitle = $api === 'session'
+        ? fn ($title) => $session->setTitle($title)
+        : fn ($title) => Terminal::setTitle($title, $stream);
 
-// 2. Setting title on non-TTY stream without ANSI capability returns false
+    $rejected = 0;
+    foreach (array_merge(range(0, 31), [127]) as $byte) {
+        ftruncate($stream, 0);
+        rewind($stream);
+        $result = $setTitle('Hello'.chr($byte).'World');
+        rewind($stream);
+        if ($result === false && stream_get_contents($stream) === '') {
+            ++$rejected;
+        } else {
+            printf("%s failed to reject control 0x%02x without output\n", $api, $byte);
+        }
+    }
+    echo "$api rejected controls: $rejected\n";
+
+    foreach (['CLI Worker [active]', 'café résumé 😀'] as $title) {
+        ftruncate($stream, 0);
+        rewind($stream);
+        var_dump($setTitle($title));
+        rewind($stream);
+        var_dump(stream_get_contents($stream) === "\033]0;$title\x07");
+    }
+    fclose($stream);
+}
+
+// Setting title on non-TTY stream without ANSI capability returns false.
 putenv('NO_COLOR=1');
 putenv('CLICOLOR_FORCE');
 $stream = fopen('php://temp', 'w+');
@@ -25,25 +48,7 @@ var_dump(Terminal::setTitle("My Title", $stream));
 var_dump(Terminal::beep($stream));
 fclose($stream);
 
-// 3. Setting title with ANSI capability emits standard OSC 0 sequence.
-//    Non-ASCII printable bytes in a UTF-8 title are accepted verbatim.
-putenv('NO_COLOR');
-putenv('CLICOLOR_FORCE=1');
-$stream = fopen('php://temp', 'w+');
-var_dump(Terminal::setTitle("CLI Worker [active]", $stream));
-rewind($stream);
-$output = stream_get_contents($stream);
-var_dump($output === "\033]0;CLI Worker [active]\x07");
-fclose($stream);
-
-$stream = fopen('php://temp', 'w+');
-var_dump(Terminal::setTitle("café résumé", $stream));
-rewind($stream);
-$output = stream_get_contents($stream);
-var_dump($output === "\033]0;café résumé\x07");
-fclose($stream);
-
-// 4. Closed stream rejection
+// Closed stream rejection.
 $stream = fopen('php://temp', 'w+');
 fclose($stream);
 try {
@@ -53,17 +58,16 @@ try {
 }
 ?>
 --EXPECT--
-bool(false)
-bool(false)
-bool(false)
-bool(false)
-bool(false)
-bool(false)
-bool(false)
-bool(false)
-bool(false)
+session rejected controls: 33
 bool(true)
 bool(true)
 bool(true)
 bool(true)
+legacy rejected controls: 33
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(false)
+bool(false)
 closed stream rejected

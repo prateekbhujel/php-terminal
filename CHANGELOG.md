@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Harden `setTitle()` control character filtering: reject all C0 controls and DEL instead of an allow-list of four bytes, closing residual ANSI/OSC escape injection paths.
+- Harden `setTitle()` against control-sequence injection by rejecting all C0 controls and DEL instead of a small list of specific control bytes.
 
 ## 1.0.0 - 2026-09-20
 
