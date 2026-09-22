@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -21,15 +22,28 @@ class ConsoleHarness
         [FieldOffset(14)] public char Character;
         [FieldOffset(16)] public uint ControlState;
     }
+    [StructLayout(LayoutKind.Sequential)]
+    struct SecurityAttributes
+    {
+        public int Length;
+        public IntPtr SecurityDescriptor;
+        [MarshalAs(UnmanagedType.Bool)] public bool InheritHandle;
+    }
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool AllocConsole();
     [DllImport("kernel32.dll")] static extern bool FreeConsole();
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     static extern IntPtr CreateFileW(string name, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CreateFileW")]
+    static extern IntPtr CreateInheritableFileW(string name, uint access, uint share, ref SecurityAttributes security, uint creation, uint flags, IntPtr template);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleMode(IntPtr handle, out uint mode);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetConsoleMode(IntPtr handle, uint mode);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool WriteConsoleInputW(IntPtr handle, InputRecord[] records, uint count, out uint written);
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool FlushConsoleInputBuffer(IntPtr handle);
-    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern uint GetConsoleTitleW(StringBuilder title, uint size);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool SetConsoleTitleW(string title);
+    [DllImport("kernel32.dll")] static extern IntPtr GetStdHandle(int handle);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool SetStdHandle(int handle, IntPtr value);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool CloseHandle(IntPtr handle);
 
     static void Check(bool ok, string message)
     {
@@ -51,6 +65,61 @@ class ConsoleHarness
         }
     }
     static string Quote(string arg) { return "\"" + arg.Replace("\"", "\\\"") + "\""; }
+    static string Title()
+    {
+        var title = new StringBuilder(65536);
+        GetConsoleTitleW(title, (uint)title.Capacity);
+        return title.ToString();
+    }
+    static string RunTitle(string php, string dll, string script, string scenario)
+    {
+        string before = Title();
+        IntPtr stdout = GetStdHandle(-11);
+        Check(stdout != IntPtr.Zero && stdout != new IntPtr(-1), "Get stdout");
+        var security = new SecurityAttributes { Length = Marshal.SizeOf(typeof(SecurityAttributes)), InheritHandle = true };
+        IntPtr output = CreateInheritableFileW("CONOUT$", 0xc0000000, 3, ref security, 3, 0, IntPtr.Zero);
+        Check(output != new IntPtr(-1), "Open console output");
+        try
+        {
+            // The title's native path needs console stdout. Keep test messages on stderr.
+            Check(SetStdHandle(-11, output), "Set console stdout");
+            var info = new ProcessStartInfo(php, "-n -d " + Quote("extension=" + dll) + " " + Quote(script) + " " + scenario);
+            info.UseShellExecute = false;
+            info.CreateNoWindow = false;
+            info.RedirectStandardInput = info.RedirectStandardError = true;
+            using (var child = Process.Start(info))
+            {
+                try
+                {
+                    string unicodeTitle = "Terminal caf\u00e9 \u65e5\u672c\u8a9e \ud83d\ude00";
+                    string[] titles = { unicodeTitle, unicodeTitle, unicodeTitle, "" };
+                    string[] results = { "true", "false", "false", "true" };
+                    for (int i = 0; i < titles.Length; i++)
+                    {
+                        var result = child.StandardError.ReadLineAsync();
+                        Check(result.Wait(5000) && result.Result == results[i], "Title result " + i);
+                        Check(Title() == titles[i], "Console title mismatch " + i);
+                        child.StandardInput.WriteLine("checked");
+                        child.StandardInput.Flush();
+                    }
+                    var error = child.StandardError.ReadToEndAsync();
+                    Check(child.WaitForExit(5000), "Title child timed out");
+                    Check(child.ExitCode == 0 && error.Result == "", "Title child failed: " + error.Result);
+                }
+                finally
+                {
+                    if (!child.HasExited) child.Kill();
+                }
+            }
+            return scenario + ": passed";
+        }
+        finally
+        {
+            Check(SetStdHandle(-11, stdout), "Restore stdout");
+            Check(CloseHandle(output), "Close console output");
+            Check(SetConsoleTitleW(before), "Restore console title");
+        }
+    }
     static string Run(string php, string dll, string script, IntPtr input, string scenario, string chars, ushort key, string expected, ushort repeat)
     {
         Check(FlushConsoleInputBuffer(input), "FlushConsoleInputBuffer");
@@ -114,6 +183,8 @@ class ConsoleHarness
         try
         {
             Check(input != new IntPtr(-1), "Open console input");
+            log.WriteLine(RunTitle(args[0], args[1], args[2], "title"));
+            log.WriteLine(RunTitle(args[0], args[1], args[2], "title-resource"));
             log.WriteLine(Run(args[0], args[1], args[2], input, "key", "x", 0, "78", 1));
             log.WriteLine(Run(args[0], args[1], args[2], input, "key", "\0", 38, "Up", 1));
             log.WriteLine(Run(args[0], args[1], args[2], input, "key", "\ud83d\ude00", 0, "f09f9880", 1));
