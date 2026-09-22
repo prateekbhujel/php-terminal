@@ -23,7 +23,7 @@ It exposes the pieces that are awkward to normalize in userland, especially once
 
 Created and maintained by Pratik Bhujel.
 
-Current release: `v1.0.0`.
+Current release: `v1.0.1`.
 
 ## Install
 
@@ -32,9 +32,10 @@ pie install prateekbhujel/php-terminal:^1.0
 php --ri terminal
 ```
 
-For Windows, download the DLL zip matching your PHP version, architecture and
-TS/NTS mode from [the release page](https://github.com/prateekbhujel/php-terminal/releases/tag/v1.0.0).
-Copy `php_terminal.dll` to that PHP installation's extension directory and enable
+For Windows x64, download the DLL zip matching your PHP version, TS/NTS mode,
+and Visual Studio build (`vs16` or `vs17`) from [the release page](https://github.com/prateekbhujel/php-terminal/releases).
+Extract the archive and rename its versioned DLL to `php_terminal.dll`. Copy it
+to that PHP installation's extension directory and enable
 `extension=php_terminal.dll` in its `php.ini`. Check the selected runtime with
 `php --ini` and `php -i`; XAMPP, MAMP, Laragon and other distributions each have
 their own PHP configuration.
@@ -221,7 +222,7 @@ extension. Build in a path without spaces.
 ```sh
 git clone https://github.com/prateekbhujel/php-terminal.git
 cd php-terminal
-git checkout v1.0.0
+git checkout v1.0.1
 phpize
 ./configure --with-php-config="$(command -v php-config)"
 make -j2
