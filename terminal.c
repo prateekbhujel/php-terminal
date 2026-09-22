@@ -42,6 +42,10 @@
 
 #ifdef PHP_WIN32
 typedef HANDLE terminal_native_stream;
+/* Console handles in a process share one input buffer. Keep unread repetitions
+ * available when switching between sessions or between key and secret reads. */
+ZEND_TLS INPUT_RECORD terminal_pending_key;
+ZEND_TLS WCHAR terminal_pending_high_surrogate;
 #else
 typedef int terminal_native_stream;
 #endif
@@ -875,6 +879,21 @@ static zend_string *terminal_key_from_input_record(const KEY_EVENT_RECORD *key, 
 	return terminal_key_from_wchar(key->uChar.UnicodeChar, high_surrogate);
 }
 
+static bool terminal_read_console_record(HANDLE handle, DWORD wait_ms, INPUT_RECORD *record, WCHAR *high_surrogate)
+{
+	DWORD records_read;
+
+	if (terminal_pending_key.Event.KeyEvent.wRepeatCount > 0) {
+		*record = terminal_pending_key;
+		*high_surrogate = terminal_pending_high_surrogate;
+		terminal_pending_key.Event.KeyEvent.wRepeatCount = 0;
+		return true;
+	}
+
+	return WaitForSingleObject(handle, wait_ms) == WAIT_OBJECT_0
+		&& ReadConsoleInputW(handle, record, 1, &records_read) && records_read == 1;
+}
+
 static zend_string *terminal_read_stream_key(terminal_native_stream input, php_stream *stream, double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
 {
 	HANDLE handle = input;
@@ -907,18 +926,7 @@ static zend_string *terminal_read_stream_key(terminal_native_stream input, php_s
 
 	for (;;) {
 		INPUT_RECORD record;
-		DWORD records_read;
-		DWORD wait_result = WaitForSingleObject(handle, wait_ms);
-
-		if (wait_result == WAIT_TIMEOUT) {
-			break;
-		}
-
-		if (wait_result != WAIT_OBJECT_0) {
-			break;
-		}
-
-		if (!ReadConsoleInputW(handle, &record, 1, &records_read) || records_read != 1) {
+		if (!terminal_read_console_record(handle, wait_ms, &record, &high_surrogate)) {
 			break;
 		}
 
@@ -928,9 +936,15 @@ static zend_string *terminal_read_stream_key(terminal_native_stream input, php_s
 		}
 
 		if (record.EventType == KEY_EVENT && record.Event.KeyEvent.bKeyDown) {
+			WCHAR previous_high_surrogate = high_surrogate;
 			zend_string *key = terminal_key_from_input_record(&record.Event.KeyEvent, &high_surrogate);
 
 			if (key != NULL) {
+				if (record.Event.KeyEvent.wRepeatCount > 1) {
+					terminal_pending_key = record;
+					terminal_pending_key.Event.KeyEvent.wRepeatCount--;
+					terminal_pending_high_surrogate = previous_high_surrogate;
+				}
 				result = key;
 				break;
 			}
@@ -981,15 +995,7 @@ static zend_string *terminal_read_stream_secret(terminal_native_stream input, ph
 	for (;;) {
 		INPUT_RECORD record;
 		KEY_EVENT_RECORD *key;
-		DWORD records_read;
-		DWORD wait_result = WaitForSingleObject(handle, INFINITE);
-
-		if (wait_result != WAIT_OBJECT_0) {
-			failed = true;
-			break;
-		}
-
-		if (!ReadConsoleInputW(handle, &record, 1, &records_read) || records_read != 1) {
+		if (!terminal_read_console_record(handle, INFINITE, &record, &high_surrogate)) {
 			failed = true;
 			break;
 		}
@@ -3239,6 +3245,18 @@ PHP_MINIT_FUNCTION(terminal)
 	return SUCCESS;
 }
 
+PHP_RINIT_FUNCTION(terminal)
+{
+#if defined(ZTS) && defined(COMPILE_DL_TERMINAL)
+	ZEND_TSRMLS_CACHE_UPDATE();
+#endif
+#ifdef PHP_WIN32
+	memset(&terminal_pending_key, 0, sizeof(terminal_pending_key));
+	terminal_pending_high_surrogate = 0;
+#endif
+	return SUCCESS;
+}
+
 PHP_MINFO_FUNCTION(terminal)
 {
 	(void) zend_module;
@@ -3260,7 +3278,7 @@ zend_module_entry terminal_module_entry = {
 	NULL,
 	PHP_MINIT(terminal),
 	NULL,
-	NULL,
+	PHP_RINIT(terminal),
 	NULL,
 	PHP_MINFO(terminal),
 	PHP_TERMINAL_VERSION,

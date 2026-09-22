@@ -21,12 +21,37 @@ if ($argv[1] === 'title' || $argv[1] === 'title-resource') {
 $input = fopen('CONIN$', 'r+');
 $output = fopen('php://memory', 'w+');
 $terminal = Terminal::fromStreams($input, $output);
-if (stream_isatty(STDIN)) {
+if ($argv[1] !== 'key-repeat-legacy' && stream_isatty(STDIN)) {
     throw new RuntimeException('Test stdin must be redirected');
 }
 fwrite(STDOUT, "READY\n");
 
 switch ($argv[1]) {
+    case 'key-repeat':
+    case 'key-repeat-legacy':
+    case 'key-repeat-order':
+        $keys = [];
+        $count = $argv[1] === 'key-repeat-order' ? 6 : 3;
+        for ($i = 0; $i < $count; $i++) {
+            // A second session must see input left by the first one.
+            $reader = $i % 2 === 0 ? $terminal : Terminal::fromStreams($input, $output);
+            $key = $argv[1] === 'key-repeat-legacy' && $i === 1
+                ? \Terminal\Terminal::readKey(0.0)
+                : $reader->readKey($i === 0 ? 2.0 : 0.0);
+            if ($key === false) {
+                throw new RuntimeException('Missing repeated key');
+            }
+            $keys[] = $key instanceof Io\Terminal\Key ? $key->name : bin2hex($key);
+        }
+        if ($terminal->readKey(0.0) !== false) {
+            throw new RuntimeException('Unexpected extra key');
+        }
+        echo implode('|', $keys);
+        break;
+    case 'key-secret':
+        $key = $terminal->readKey(2.0);
+        echo bin2hex($key), '|', bin2hex($terminal->readSecret());
+        break;
     case 'key':
         $key = $terminal->readKey(2.0);
         echo $key instanceof Io\Terminal\Key ? $key->name : bin2hex($key);
