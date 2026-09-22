@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Harden `setTitle()` against control-sequence injection by rejecting all C0 controls and DEL instead of a small list of specific control bytes.
+- Harden `setTitle()` against control-sequence injection. It now requires valid UTF-8 and rejects C0/C1 controls and DEL.
 
 ## 1.0.0 - 2026-09-20
 

@@ -1,5 +1,5 @@
 --TEST--
-Session and legacy setTitle reject controls without output and preserve UTF-8
+Session and legacy setTitle reject unsafe input without output and preserve UTF-8
 --EXTENSIONS--
 terminal
 --FILE--
@@ -17,7 +17,7 @@ foreach (['session', 'legacy'] as $api) {
         : fn ($title) => Terminal::setTitle($title, $stream);
 
     $rejected = 0;
-    foreach (array_merge(range(0, 31), [127]) as $byte) {
+    foreach (array_merge(range(0, 31), range(127, 159)) as $byte) {
         ftruncate($stream, 0);
         rewind($stream);
         $result = $setTitle('Hello'.chr($byte).'World');
@@ -30,7 +30,35 @@ foreach (['session', 'legacy'] as $api) {
     }
     echo "$api rejected controls: $rejected\n";
 
-    foreach (['CLI Worker [active]', 'café résumé 😀'] as $title) {
+    $rejected = 0;
+    foreach (["\xc2", "\xc3\x28", "\xc0\x80", "\xed\xa0\x80", "\xf4\x90\x80\x80"] as $title) {
+        ftruncate($stream, 0);
+        rewind($stream);
+        $result = $setTitle($title);
+        rewind($stream);
+        if ($result === false && stream_get_contents($stream) === '') {
+            ++$rejected;
+        } else {
+            echo "$api accepted malformed UTF-8\n";
+        }
+    }
+    echo "$api rejected malformed UTF-8: $rejected\n";
+
+    $rejected = 0;
+    foreach (range(0x80, 0x9f) as $byte) {
+        ftruncate($stream, 0);
+        rewind($stream);
+        $result = $setTitle("\xc2".chr($byte));
+        rewind($stream);
+        if ($result === false && stream_get_contents($stream) === '') {
+            ++$rejected;
+        } else {
+            echo "$api accepted C1 character\n";
+        }
+    }
+    echo "$api rejected C1 characters: $rejected\n";
+
+    foreach (['CLI Worker [active]', "U+00A0 \xc2\xa0", '日本語', 'café résumé 😀'] as $title) {
         ftruncate($stream, 0);
         rewind($stream);
         var_dump($setTitle($title));
@@ -58,12 +86,24 @@ try {
 }
 ?>
 --EXPECT--
-session rejected controls: 33
+session rejected controls: 65
+session rejected malformed UTF-8: 5
+session rejected C1 characters: 32
 bool(true)
 bool(true)
 bool(true)
 bool(true)
-legacy rejected controls: 33
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+legacy rejected controls: 65
+legacy rejected malformed UTF-8: 5
+legacy rejected C1 characters: 32
+bool(true)
+bool(true)
+bool(true)
+bool(true)
 bool(true)
 bool(true)
 bool(true)
