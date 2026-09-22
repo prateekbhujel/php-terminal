@@ -61,13 +61,15 @@ jobs:
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --notes ""
           fi
-          if [ "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq .immutable)" = true ]; then
+          release_id=$(gh release view "$RELEASE_TAG" --json databaseId --jq .databaseId)
+          immutable=$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" --jq .immutable)
+          if [ "$immutable" = true ]; then
             echo "Release $RELEASE_TAG is immutable" >&2
             exit 1
           fi
           shopt -s nullglob
           artifacts=(artifacts/php*)
-          (${#artifacts[@]}) || { echo "No Windows release artifacts found" >&2; exit 1; }
+          ((${#artifacts[@]})) || { echo "No Windows release artifacts found" >&2; exit 1; }
           gh release upload "$RELEASE_TAG" "${artifacts[@]}" --clobber
 
       - name: Publish with release notes
