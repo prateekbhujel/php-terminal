@@ -129,6 +129,7 @@ class ConsoleHarness
         info.UseShellExecute = false;
         info.CreateNoWindow = false;
         info.RedirectStandardInput = info.RedirectStandardOutput = info.RedirectStandardError = true;
+        info.RedirectStandardInput = scenario != "key-repeat-legacy";
         using (var child = Process.Start(info))
         {
             try
@@ -188,6 +189,13 @@ class ConsoleHarness
             log.WriteLine(Run(args[0], args[1], args[2], input, "key", "x", 0, "78", 1));
             log.WriteLine(Run(args[0], args[1], args[2], input, "key", "\0", 38, "Up", 1));
             log.WriteLine(Run(args[0], args[1], args[2], input, "key", "\ud83d\ude00", 0, "f09f9880", 1));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "key-repeat", "x", 0, "78|78|78", 3));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "key-repeat-legacy", "x", 0, "78|78|78", 3));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "key-repeat", "\0", 38, "Up|Up|Up", 3));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "key-repeat", "\ud83d\ude00", 0, "f09f9880|f09f9880|f09f9880", 3));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "key-repeat-order", "xy", 0, "78|78|78|79|79|79", 3));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "key-secret", "x\r", 0, "78|7878", 3));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "key-secret", "\ud83d\ude00\r", 0, "f09f9880|f09f9880f09f9880", 3));
             log.WriteLine(Run(args[0], args[1], args[2], input, "secret", "caf\u00e9\ud83d\ude00\b!\r", 0, "636166c3a921|70773a20", 1));
             log.WriteLine(Run(args[0], args[1], args[2], input, "secret", "x\r", 0, "787878|70773a20", 3));
             foreach (char abort in new char[] { '\x03', '\x04', '\x1b' })

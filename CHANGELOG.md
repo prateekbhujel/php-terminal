@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Preserve repeated Windows console key events across `readKey()` calls, including named keys and Unicode characters.
+
 ## 1.0.1 - 2026-09-22
 
 - Harden `setTitle()` against control-sequence injection. It now requires valid UTF-8 and rejects C0/C1 controls and DEL.
