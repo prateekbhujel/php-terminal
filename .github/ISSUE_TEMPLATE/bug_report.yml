@@ -1,0 +1,57 @@
+name: Bug report
+description: Report reproducible terminal, stream, build, or platform behavior
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough environment detail to reproduce native terminal behavior.
+        Security-sensitive reports should follow SECURITY.md instead of using this form.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, terminal emulator, PHP version, architecture, TS/NTS, extension version, and installation method.
+      placeholder: |
+        OS: Windows 11 / Ubuntu 24.04 / macOS ...
+        Terminal: Windows Terminal / iTerm2 / ...
+        PHP: 8.4.x x64 NTS
+        terminal extension: 1.0.1
+        Install: PIE / release DLL / source
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide the smallest PHP script and exact steps that reproduce the problem.
+      render: php
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Paste relevant output from php --ri terminal and examples/doctor.php. Remove secrets.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I checked docs/compatibility.md for known platform boundaries.
+          required: true
+        - label: This is not a security-sensitive report.
+          required: true
