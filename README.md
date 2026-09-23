@@ -44,6 +44,20 @@ PHP 8.1 or later is required. CI covers Linux PHP 8.1–8.5, macOS PHP 8.4, and
 Windows x64 PHP 8.2–8.5 in TS/NTS builds. PHP nightly is checked separately and
 is advisory. See [compatibility](docs/compatibility.md) for platform boundaries.
 
+
+## Documentation
+
+The repository documentation is versioned with the source so a release tag also
+points to the matching docs.
+
+- [Documentation index](docs/README.md)
+- [API guide](docs/api.md)
+- [Compatibility and platform support](docs/compatibility.md)
+- [Framework and library integration](docs/integration.md)
+- [Contributing](CONTRIBUTING.md)
+- [Release process](docs/releasing.md)
+- [Security policy](SECURITY.md)
+
 ## A terminal session
 
 ```php
@@ -70,7 +84,7 @@ release. Experimental PHP nightly behavior is outside that compatibility promise
 The extension supplies terminal operations, not a TUI toolkit. Frameworks must
 opt in; installing it does not automatically change Symfony Console or Laravel
 Prompts. Native input avoids spawning `stty` or bundling a hidden-input executable.
-An RFC for PHP core is planned; this extension remains independently usable.
+A future PHP core RFC is being explored; this extension remains independently usable.
 
 ## Input and output streams
 

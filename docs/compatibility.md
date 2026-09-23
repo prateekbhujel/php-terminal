@@ -45,11 +45,12 @@ The documented 1.x contract covers:
 
 - TTY detection
 - ANSI/VT support detection and enablement
-- terminal size detection
+- terminal size and color-depth detection
 - raw mode enable/restore through `Io\Terminal\ModeToken`
 - key reads for common prompt keys
 - secret input
 - direct writes
+- safe title changes and terminal bell output
 - PHP stream-resource support for native streams
 
 Still intentionally narrow:
@@ -87,3 +88,8 @@ Good candidates:
 - `fopen('php://stderr', 'w')`
 
 Use `examples/streams.php` for a small non-interactive check.
+
+## Related documentation
+
+See also [the API guide](api.md) for the stable 1.x surface and
+[the integration guide](integration.md) for optional framework/library adoption.

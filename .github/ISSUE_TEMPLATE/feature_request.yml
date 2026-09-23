@@ -1,0 +1,36 @@
+name: Feature request
+description: Propose a focused native terminal capability or compatibility improvement
+title: "[Feature] "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What terminal problem cannot be handled cleanly with the current API?
+    validations:
+      required: true
+  - type: textarea
+    id: native
+    attributes:
+      label: Why this belongs in the extension
+      description: Explain why portable userland PHP is insufficient, especially across POSIX and Windows.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API or behavior
+      description: Keep the 1.x compatibility contract in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This keeps php-terminal focused on terminal primitives rather than a TUI framework.
+          required: true
