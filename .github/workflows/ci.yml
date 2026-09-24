@@ -30,7 +30,7 @@ jobs:
         run: composer validate --strict
 
   unix:
-    name: ${{ matrix.os == 'macos-14' && 'macos' || 'unix' }} (${{ matrix.php-version }})
+    name: ${{ matrix.os == 'macos-15' && 'macos' || 'unix' }} (${{ matrix.php-version }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     continue-on-error: ${{ matrix.php-version == 'nightly' }}
@@ -40,7 +40,7 @@ jobs:
         os: [ubuntu-24.04]
         php-version: ['8.1', '8.2', '8.3', '8.4', '8.5', 'nightly']
         include:
-          - os: macos-14
+          - os: macos-15
             php-version: '8.4'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
