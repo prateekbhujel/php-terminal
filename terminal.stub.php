@@ -141,6 +141,8 @@ namespace Io\Terminal
 
         public function readKey(?float $timeout = null, ?float $sequenceTimeout = null): Key|string|false {}
 
+        public function readEvent(?float $timeout = null): array|false {}
+
         public function readSecret(string $prompt = ""): string {}
     }
 }

@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: e72cd5162435c5ff36d8a1d982929d97deca397f */
+ * Stub hash: e69b65770ce6f53374c97250b2186ce3d60f80f9 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Io_Terminal_ColorDepth_bits, 0, 0, IS_LONG, 0)
 ZEND_END_ARG_INFO()
@@ -83,6 +83,10 @@ ZEND_END_ARG_INFO()
 ZEND_BEGIN_ARG_WITH_RETURN_OBJ_TYPE_MASK_EX(arginfo_class_Io_Terminal_Terminal_readKey, 0, 0, Io\\Terminal\\Key, MAY_BE_STRING|MAY_BE_FALSE)
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, timeout, IS_DOUBLE, 1, "null")
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, sequenceTimeout, IS_DOUBLE, 1, "null")
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_class_Io_Terminal_Terminal_readEvent, 0, 0, MAY_BE_ARRAY|MAY_BE_FALSE)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, timeout, IS_DOUBLE, 1, "null")
 ZEND_END_ARG_INFO()
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_class_Io_Terminal_Terminal_readSecret, 0, 0, IS_STRING, 0)
@@ -170,6 +174,7 @@ ZEND_METHOD(Io_Terminal_Terminal, write);
 ZEND_METHOD(Io_Terminal_Terminal, enableRawMode);
 ZEND_METHOD(Io_Terminal_Terminal, restoreMode);
 ZEND_METHOD(Io_Terminal_Terminal, readKey);
+ZEND_METHOD(Io_Terminal_Terminal, readEvent);
 ZEND_METHOD(Io_Terminal_Terminal, readSecret);
 ZEND_METHOD(Terminal_Terminal, getBackend);
 ZEND_METHOD(Terminal_Terminal, isTty);
@@ -228,6 +233,7 @@ static const zend_function_entry class_Io_Terminal_Terminal_methods[] = {
 	ZEND_ME(Io_Terminal_Terminal, enableRawMode, arginfo_class_Io_Terminal_Terminal_enableRawMode, ZEND_ACC_PUBLIC)
 	ZEND_ME(Io_Terminal_Terminal, restoreMode, arginfo_class_Io_Terminal_Terminal_restoreMode, ZEND_ACC_PUBLIC)
 	ZEND_ME(Io_Terminal_Terminal, readKey, arginfo_class_Io_Terminal_Terminal_readKey, ZEND_ACC_PUBLIC)
+	ZEND_ME(Io_Terminal_Terminal, readEvent, arginfo_class_Io_Terminal_Terminal_readEvent, ZEND_ACC_PUBLIC)
 	ZEND_ME(Io_Terminal_Terminal, readSecret, arginfo_class_Io_Terminal_Terminal_readSecret, ZEND_ACC_PUBLIC)
 	ZEND_FE_END
 };

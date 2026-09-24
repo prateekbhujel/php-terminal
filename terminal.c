@@ -969,6 +969,105 @@ static zend_string *terminal_read_stream_key(terminal_native_stream input, php_s
 	return result;
 }
 
+static bool terminal_read_stream_event(terminal_native_stream input, php_stream *stream, double timeout, bool timeout_is_null, zval *return_value)
+{
+	HANDLE handle = input;
+	DWORD mode;
+	DWORD raw_mode;
+	INPUT_RECORD record;
+	WCHAR unused_high_surrogate = 0;
+	bool mode_changed;
+	bool read_ok;
+
+	if (handle == INVALID_HANDLE_VALUE || handle == NULL
+		|| (stream != NULL && stream->writepos > stream->readpos)
+		|| !GetConsoleMode(handle, &mode)) {
+		return false;
+	}
+
+	/* Window-size notifications require ENABLE_WINDOW_INPUT. Restore the exact
+	 * previous mode even when another raw-mode owner is already active. */
+	raw_mode = terminal_make_raw_mode(mode) | ENABLE_WINDOW_INPUT;
+	mode_changed = raw_mode != mode;
+	if (mode_changed && !SetConsoleMode(handle, raw_mode)) {
+		return false;
+	}
+
+	read_ok = terminal_read_console_record(handle, terminal_timeout_to_wait_ms(timeout, timeout_is_null), &record, &unused_high_surrogate);
+	if (mode_changed && !SetConsoleMode(handle, mode)) {
+		return false;
+	}
+	if (!read_ok) {
+		return false;
+	}
+
+	array_init(return_value);
+	switch (record.EventType) {
+		case KEY_EVENT: {
+			const KEY_EVENT_RECORD *key = &record.Event.KeyEvent;
+			zend_string *named_key = terminal_key_from_virtual_key(key->wVirtualKeyCode);
+			WCHAR high_surrogate = 0;
+			zend_string *text = terminal_key_from_wchar(key->uChar.UnicodeChar, &high_surrogate);
+			add_assoc_string(return_value, "type", "key");
+			if (named_key != NULL) {
+				zend_object *key_case = terminal_key_enum_from_string(named_key);
+				if (key_case != NULL) {
+					zval key_value;
+					ZVAL_OBJ_COPY(&key_value, key_case);
+					add_assoc_zval(return_value, "key", &key_value);
+				} else {
+					add_assoc_null(return_value, "key");
+				}
+				zend_string_release(named_key);
+			} else {
+				add_assoc_null(return_value, "key");
+			}
+			if (text != NULL) {
+				add_assoc_str(return_value, "text", text);
+			} else {
+				add_assoc_null(return_value, "text");
+			}
+			add_assoc_bool(return_value, "keyDown", key->bKeyDown != 0);
+			add_assoc_long(return_value, "repeatCount", key->wRepeatCount);
+			add_assoc_long(return_value, "virtualKeyCode", key->wVirtualKeyCode);
+			add_assoc_long(return_value, "virtualScanCode", key->wVirtualScanCode);
+			add_assoc_long(return_value, "unicodeCodeUnit", key->uChar.UnicodeChar);
+			add_assoc_long(return_value, "controlKeyState", key->dwControlKeyState);
+			add_assoc_bool(return_value, "ctrl", (key->dwControlKeyState & (LEFT_CTRL_PRESSED | RIGHT_CTRL_PRESSED)) != 0);
+			add_assoc_bool(return_value, "alt", (key->dwControlKeyState & (LEFT_ALT_PRESSED | RIGHT_ALT_PRESSED)) != 0);
+			add_assoc_bool(return_value, "shift", (key->dwControlKeyState & SHIFT_PRESSED) != 0);
+			break;
+		}
+		case WINDOW_BUFFER_SIZE_EVENT:
+			add_assoc_string(return_value, "type", "resize");
+			add_assoc_long(return_value, "bufferCols", record.Event.WindowBufferSizeEvent.dwSize.X);
+			add_assoc_long(return_value, "bufferRows", record.Event.WindowBufferSizeEvent.dwSize.Y);
+			break;
+		case MOUSE_EVENT:
+			add_assoc_string(return_value, "type", "mouse");
+			add_assoc_long(return_value, "x", record.Event.MouseEvent.dwMousePosition.X);
+			add_assoc_long(return_value, "y", record.Event.MouseEvent.dwMousePosition.Y);
+			add_assoc_long(return_value, "buttonState", record.Event.MouseEvent.dwButtonState);
+			add_assoc_long(return_value, "controlKeyState", record.Event.MouseEvent.dwControlKeyState);
+			add_assoc_long(return_value, "eventFlags", record.Event.MouseEvent.dwEventFlags);
+			break;
+		case FOCUS_EVENT:
+			add_assoc_string(return_value, "type", "focus");
+			add_assoc_bool(return_value, "focused", record.Event.FocusEvent.bSetFocus != 0);
+			break;
+		case MENU_EVENT:
+			add_assoc_string(return_value, "type", "menu");
+			add_assoc_long(return_value, "commandId", record.Event.MenuEvent.dwCommandId);
+			break;
+		default:
+			add_assoc_string(return_value, "type", "unknown");
+			add_assoc_long(return_value, "eventType", record.EventType);
+			break;
+	}
+
+	return true;
+}
+
 static zend_string *terminal_read_stream_secret(terminal_native_stream input, php_stream *stream)
 {
 	HANDLE handle = input;
@@ -1914,6 +2013,68 @@ static zend_string *terminal_read_stream_key(terminal_native_stream input, php_s
 	return result;
 }
 
+static bool terminal_read_stream_event(terminal_native_stream input, php_stream *stream, double timeout, bool timeout_is_null, zval *return_value)
+{
+	int fd = input;
+	int timeout_ms = terminal_timeout_to_ms(timeout, timeout_is_null);
+	struct termios mode;
+	struct termios raw_mode;
+	char buffer[4096];
+	size_t length = 0;
+	int read_result;
+	bool mode_changed;
+
+	if (fd < 0 || isatty(fd) != 1 || tcgetattr(fd, &mode) != 0) {
+		return false;
+	}
+
+	/* A framework may own SIGWINCH. Do not replace its handler here: this
+	 * primitive only returns uninterpreted bytes from the input descriptor. */
+	raw_mode = mode;
+	terminal_make_raw_mode(&raw_mode);
+	mode_changed = memcmp(&raw_mode, &mode, sizeof(mode)) != 0;
+	if (mode_changed && tcsetattr(fd, TCSANOW, &raw_mode) != 0) {
+		return false;
+	}
+
+	read_result = terminal_read_byte(fd, stream, (unsigned char *) buffer, timeout_ms, false);
+	if (read_result == 1) {
+		length = 1;
+		/* Drain only bytes already available. Bound each event so large pastes
+		 * do not allocate one PHP array per byte or an unbounded buffer. */
+		while (length < sizeof(buffer)) {
+			ssize_t count;
+			if (stream != NULL && stream->writepos > stream->readpos) {
+				size_t available = (size_t) (stream->writepos - stream->readpos);
+				if (available > sizeof(buffer) - length) {
+					available = sizeof(buffer) - length;
+				}
+				count = (ssize_t) php_stream_read(stream, buffer + length, available);
+			} else if (terminal_wait_for_input(fd, 0) > 0) {
+				count = read(fd, buffer + length, sizeof(buffer) - length);
+			} else {
+				break;
+			}
+			if (count <= 0) {
+				break;
+			}
+			length += (size_t) count;
+		}
+	}
+
+	if (mode_changed && tcsetattr(fd, TCSANOW, &mode) != 0) {
+		return false;
+	}
+	if (length == 0) {
+		return false;
+	}
+
+	array_init(return_value);
+	add_assoc_string(return_value, "type", "data");
+	add_assoc_stringl(return_value, "data", buffer, length);
+	return true;
+}
+
 static zend_string *terminal_read_stream_secret(terminal_native_stream input, php_stream *stream)
 {
 	int fd = input;
@@ -2533,6 +2694,25 @@ static void terminal_do_read_key(zval *stream_arg, double timeout, bool timeout_
 	RETURN_STR(key);
 }
 
+static void terminal_do_read_event(zval *stream_arg, double timeout, bool timeout_is_null, uint32_t stream_arg_num, zval *return_value)
+{
+	terminal_stream_target stream;
+
+	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDIN, stream_arg_num, &stream)) {
+		RETURN_THROWS();
+	}
+	if (stream.is_enum) {
+		terminal_validate_input_stream_or_throw(stream.enum_id, stream_arg_num);
+	}
+	if (EG(exception)) {
+		RETURN_THROWS();
+	}
+
+	if (!terminal_read_stream_event(stream.native_stream, stream.php_stream, timeout, timeout_is_null, return_value)) {
+		RETURN_FALSE;
+	}
+}
+
 static void terminal_do_read_secret(zval *stream_arg, zval *output_arg, zend_string *prompt, uint32_t stream_arg_num, zval *return_value)
 {
 	terminal_stream_target stream;
@@ -2972,6 +3152,26 @@ ZEND_METHOD(Io_Terminal_Terminal, readKey)
 
 	intern = Z_TERMINAL_P(ZEND_THIS);
 	terminal_do_read_key(&intern->input_stream_val, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null, 0, return_value);
+}
+
+ZEND_METHOD(Io_Terminal_Terminal, readEvent)
+{
+	double timeout = 0;
+	bool timeout_is_null = true;
+	terminal_object *intern;
+
+	ZEND_PARSE_PARAMETERS_START(0, 1)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_DOUBLE_OR_NULL(timeout, timeout_is_null)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!timeout_is_null && (zend_isnan(timeout) || timeout < 0)) {
+		zend_argument_value_error(1, "must be greater than or equal to 0");
+		RETURN_THROWS();
+	}
+
+	intern = Z_TERMINAL_P(ZEND_THIS);
+	terminal_do_read_event(&intern->input_stream_val, timeout, timeout_is_null, 0, return_value);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, readSecret)
