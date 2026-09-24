@@ -21,6 +21,15 @@ class ConsoleHarness
         [FieldOffset(12)] public ushort ScanCode;
         [FieldOffset(14)] public char Character;
         [FieldOffset(16)] public uint ControlState;
+        [FieldOffset(4)] public short BufferCols;
+        [FieldOffset(6)] public short BufferRows;
+        [FieldOffset(4)] public short MouseX;
+        [FieldOffset(6)] public short MouseY;
+        [FieldOffset(8)] public uint ButtonState;
+        [FieldOffset(12)] public uint MouseControlState;
+        [FieldOffset(16)] public uint MouseEventFlags;
+        [FieldOffset(4)] public int Focused;
+        [FieldOffset(4)] public uint CommandId;
     }
     [StructLayout(LayoutKind.Sequential)]
     struct SecurityAttributes
@@ -120,10 +129,11 @@ class ConsoleHarness
             Check(SetConsoleTitleW(before), "Restore console title");
         }
     }
-    static string Run(string php, string dll, string script, IntPtr input, string scenario, string chars, ushort key, string expected, ushort repeat)
+    static string Run(string php, string dll, string script, IntPtr input, string scenario, string chars, ushort key, string expected, ushort repeat, InputRecord[] injected = null)
     {
         Check(FlushConsoleInputBuffer(input), "FlushConsoleInputBuffer");
         uint before = Mode(input) | 7; // echo, line and processed input
+        if (scenario == "event-raw") before &= ~8U; // verify raw mode enables window events
         Check(SetConsoleMode(input, before), "Set initial mode");
         var info = new ProcessStartInfo(php, "-n -d " + Quote("extension=" + dll) + " " + Quote(script) + " " + scenario);
         info.UseShellExecute = false;
@@ -138,8 +148,8 @@ class ConsoleHarness
                 Check(ready.Wait(5000) && ready.Result == "READY", "Child startup: " + scenario);
                 Await(() => (Mode(input) & 7) == 0 || child.HasExited, "Child did not enter raw mode");
                 Check(!child.HasExited, "Child exited before native input");
-                var records = new InputRecord[chars.Length];
-                for (int i = 0; i < chars.Length; i++)
+                var records = injected ?? new InputRecord[chars.Length];
+                for (int i = 0; injected == null && i < chars.Length; i++)
                 {
                     records[i].Type = 1;
                     records[i].KeyDown = 1;
@@ -150,11 +160,18 @@ class ConsoleHarness
                 uint written;
                 Check(WriteConsoleInputW(input, records, (uint)records.Length, out written) && written == records.Length, "Inject key events");
                 string prefix = "";
-                if (scenario == "raw")
+                if (scenario == "raw" || scenario == "event-raw")
                 {
                     var raw = child.StandardOutput.ReadLineAsync();
                     Check(raw.Wait(5000) && raw.Result == "78|RAW", "Raw-mode handshake");
                     Check((Mode(input) & 7) == 0, "readKey restored mode during active raw session");
+                    if (scenario == "event-raw")
+                    {
+                        Check(Mode(input) == ((before & ~7U) | 8U), "Window events were not kept enabled in raw mode");
+                        var resize = new InputRecord[] { new InputRecord { Type = 4, BufferCols = 101, BufferRows = 37 } };
+                        uint resizeWritten;
+                        Check(WriteConsoleInputW(input, resize, 1, out resizeWritten) && resizeWritten == 1, "Queue resize between reads");
+                    }
                     prefix = raw.Result + "\n";
                     child.StandardInput.WriteLine("restore");
                     child.StandardInput.Flush();
@@ -201,6 +218,42 @@ class ConsoleHarness
             foreach (char abort in new char[] { '\x03', '\x04', '\x1b' })
                 log.WriteLine(Run(args[0], args[1], args[2], input, "abort", "bad" + abort, abort == '\x1b' ? (ushort)27 : (ushort)0, "cancelled|70773a20", 1));
             log.WriteLine(Run(args[0], args[1], args[2], input, "raw", "x", 0, "78|RAW\nrestored", 1));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-key", "", 0,
+                "key|Left|-|1|2|37|75|0|8|1|0|0", 1,
+                new InputRecord[] { new InputRecord { Type = 1, KeyDown = 1, Repeat = 2, VirtualKey = 37, ScanCode = 75, ControlState = 8 } }));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-key", "", 0,
+                "key|-|78|1|1|88|45|120|18|0|1|1", 1,
+                new InputRecord[] { new InputRecord { Type = 1, KeyDown = 1, Repeat = 1, VirtualKey = 88, ScanCode = 45, Character = 'x', ControlState = 18 } }));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-key", "", 0,
+                "key|-|-|0|1|16|42|0|16|0|0|1", 1,
+                new InputRecord[] { new InputRecord { Type = 1, KeyDown = 0, Repeat = 1, VirtualKey = 16, ScanCode = 42, ControlState = 16 } }));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-key", "", 0,
+                "key|-|-|1|1|17|29|0|8|1|0|0", 1,
+                new InputRecord[] { new InputRecord { Type = 1, KeyDown = 1, Repeat = 1, VirtualKey = 17, ScanCode = 29, ControlState = 8 } }));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-key", "", 0,
+                "key|-|-|1|1|0|0|55357|0|0|0|0", 1,
+                new InputRecord[] { new InputRecord { Type = 1, KeyDown = 1, Repeat = 1, Character = '\ud83d' } }));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-key", "", 0,
+                "key|-|-|1|1|0|0|56832|0|0|0|0", 1,
+                new InputRecord[] { new InputRecord { Type = 1, KeyDown = 1, Repeat = 1, Character = '\ude00' } }));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-surrogates", "\ud83d\ude00", 0,
+                "55357:-|56832:-", 1));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-pending", "x", 0,
+                "78|2|78|false", 3));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-resize", "", 0,
+                "resize|101|37", 1,
+                new InputRecord[] { new InputRecord { Type = 4, BufferCols = 101, BufferRows = 37 } }));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-mouse", "", 0,
+                "mouse|12|9|1|8|0", 1,
+                new InputRecord[] { new InputRecord { Type = 2, MouseX = 12, MouseY = 9, ButtonState = 1, MouseControlState = 8, MouseEventFlags = 0 } }));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-focus", "", 0,
+                "focus|1", 1,
+                new InputRecord[] { new InputRecord { Type = 16, Focused = 1 } }));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-menu", "", 0,
+                "menu|42", 1,
+                new InputRecord[] { new InputRecord { Type = 8, CommandId = 42 } }));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "event-raw", "x", 0,
+                "78|RAW\nresize|101|37|restored", 1));
             return 0;
         }
         catch (Exception e) { log.WriteLine(e.ToString()); return 1; }

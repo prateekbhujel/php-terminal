@@ -6,7 +6,7 @@
 extern zend_module_entry terminal_module_entry;
 # define phpext_terminal_ptr &terminal_module_entry
 
-# define PHP_TERMINAL_VERSION "1.0.1"
+# define PHP_TERMINAL_VERSION "1.1.0"
 
 # define TERMINAL_STREAM_STDIN 0
 # define TERMINAL_STREAM_STDOUT 1

@@ -30,7 +30,7 @@ jobs:
         run: composer validate --strict
 
   unix:
-    name: ${{ matrix.os == 'macos-14' && 'macos' || 'unix' }} (${{ matrix.php-version }})
+    name: ${{ matrix.os == 'macos-15' && 'macos' || 'unix' }} (${{ matrix.php-version }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     continue-on-error: ${{ matrix.php-version == 'nightly' }}
@@ -40,7 +40,7 @@ jobs:
         os: [ubuntu-24.04]
         php-version: ['8.1', '8.2', '8.3', '8.4', '8.5', 'nightly']
         include:
-          - os: macos-14
+          - os: macos-15
             php-version: '8.4'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -100,7 +100,7 @@ jobs:
       - name: Check resource and callback lifetimes
         env:
           USE_ZEND_ALLOC: '0'
-        run: make test REPORT_EXIT_STATUS=1 NO_INTERACTION=1 TESTS="-m --show-diff tests/021_stream_resources.phpt tests/043_session_invalid_input.phpt tests/046_session_lifecycle.phpt tests/047_secret_prompt_callback.phpt"
+        run: make test REPORT_EXIT_STATUS=1 NO_INTERACTION=1 TESTS="-m --show-diff tests/021_stream_resources.phpt tests/043_session_invalid_input.phpt tests/046_session_lifecycle.phpt tests/047_secret_prompt_callback.phpt tests/048_read_event_bytes.phpt tests/049_read_event_buffered_mode.phpt"
       - name: Upload memory diagnostics
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

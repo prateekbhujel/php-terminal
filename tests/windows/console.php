@@ -27,6 +27,52 @@ if ($argv[1] !== 'key-repeat-legacy' && stream_isatty(STDIN)) {
 fwrite(STDOUT, "READY\n");
 
 switch ($argv[1]) {
+    case 'event-key':
+        $event = $terminal->readEvent(2.0);
+        if ($event === false) {
+            throw new RuntimeException('Missing console key event');
+        }
+        echo implode('|', [
+            $event['type'], $event['key']?->name ?? '-', $event['text'] === null ? '-' : bin2hex($event['text']),
+            (int) $event['keyDown'], $event['repeatCount'], $event['virtualKeyCode'],
+            $event['virtualScanCode'], $event['unicodeCodeUnit'], $event['controlKeyState'],
+            (int) $event['ctrl'], (int) $event['alt'], (int) $event['shift'],
+        ]);
+        break;
+    case 'event-surrogates':
+        $events = [$terminal->readEvent(2.0), $terminal->readEvent(2.0)];
+        foreach ($events as $event) {
+            if ($event === false || $event['type'] !== 'key') {
+                throw new RuntimeException('Missing UTF-16 key record');
+            }
+        }
+        echo implode('|', array_map(static fn ($event) => $event['unicodeCodeUnit'] . ':' . ($event['text'] === null ? '-' : bin2hex($event['text'])), $events));
+        break;
+    case 'event-pending':
+        $key = $terminal->readKey(2.0);
+        $other = Terminal::fromStreams($input, $output);
+        $event = $other->readEvent(0.0);
+        if ($event === false || $event['type'] !== 'key') {
+            throw new RuntimeException('Missing pending repetitions');
+        }
+        echo bin2hex($key), '|', $event['repeatCount'], '|', bin2hex($event['text']), '|', $terminal->readEvent(0.0) === false ? 'false' : 'extra';
+        break;
+    case 'event-resize':
+        $event = $terminal->readEvent(2.0);
+        echo $event['type'], '|', $event['bufferCols'], '|', $event['bufferRows'];
+        break;
+    case 'event-mouse':
+        $event = $terminal->readEvent(2.0);
+        echo implode('|', [$event['type'], $event['x'], $event['y'], $event['buttonState'], $event['controlKeyState'], $event['eventFlags']]);
+        break;
+    case 'event-focus':
+        $event = $terminal->readEvent(2.0);
+        echo $event['type'], '|', (int) $event['focused'];
+        break;
+    case 'event-menu':
+        $event = $terminal->readEvent(2.0);
+        echo $event['type'], '|', $event['commandId'];
+        break;
     case 'key-repeat':
     case 'key-repeat-legacy':
     case 'key-repeat-order':
@@ -67,14 +113,27 @@ switch ($argv[1]) {
         echo '|', bin2hex(stream_get_contents($output));
         break;
     case 'raw':
+    case 'event-raw':
         $token = $terminal->enableRawMode();
         if ($token !== $terminal->enableRawMode()) {
             throw new RuntimeException('Raw mode must be idempotent');
         }
-        echo bin2hex($terminal->readKey(2.0));
+        echo $argv[1] === 'event-raw'
+            ? bin2hex($terminal->readEvent(2.0)['text'])
+            : bin2hex($terminal->readKey(2.0));
+        if ($argv[1] === 'event-raw' && $terminal->readEvent(0.0) !== false) {
+            throw new RuntimeException('Expected empty poll');
+        }
         fwrite(STDOUT, "|RAW\n");
         // The parent verifies the console is still raw before releasing cleanup.
         fgets(STDIN);
+        if ($argv[1] === 'event-raw') {
+            $resize = $terminal->readEvent(0.0);
+            if ($resize === false || $resize['type'] !== 'resize') {
+                throw new RuntimeException('Resize was not queued between reads');
+            }
+            echo $resize['type'], '|', $resize['bufferCols'], '|', $resize['bufferRows'], '|';
+        }
         unset($terminal);
         echo 'restored';
         break;

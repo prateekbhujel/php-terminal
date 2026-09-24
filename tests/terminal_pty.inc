@@ -43,7 +43,7 @@ function terminal_test_pty(string $code, ?string $input, bool $checkRestoration 
     }
     $output = $error = $echo = '';
     $sent = false;
-    $deadline = microtime(true) + 5;
+    $deadline = microtime(true) + (getenv('USE_ZEND_ALLOC') === '0' ? 60 : 5);
     do {
         $output .= stream_get_contents($pipes[1]);
         $error .= stream_get_contents($pipes[2]);
