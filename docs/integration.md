@@ -78,6 +78,20 @@ Keep one session alive for raw input loops instead of constructing a session per
 key. Raw-mode ownership belongs to that session, and explicit restore belongs in
 a `finally` block.
 
+For a prompt that only needs common keys, use `readKey()`. A TUI parser that
+needs original escape sequences or Windows modifier/repeat/release records can
+use `readEvent()` starting with extension 1.1.0. The `hasTerminalV1()` example
+above also accepts 1.0.x. Check for version 1.1.0 or newer within that 1.x
+range before calling the new method.
+
+On POSIX, append each `data` chunk to the parser's input buffer. Chunks are
+arbitrary byte boundaries, so do not interpret a lone high byte as Alt/Meta or
+assume one chunk is one key or complete UTF-8 character. The extension leaves
+`SIGWINCH` to the application's signal watcher. On Windows, dispatch by the
+event's `type` and use the original virtual key, UTF-16 unit and control-state
+fields when mapping input. `readEvent()` does not turn native key records into
+terminal escape sequences.
+
 Use `getSize()` on resize paths rather than spawning `stty size` when the
 extension is available. On Windows, native raw mode and console key events avoid
 the Unix-only `stty` dependency.

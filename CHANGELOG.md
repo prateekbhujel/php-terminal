@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 - 2026-09-24
 
+- Add `Io\Terminal\Terminal::readEvent()` for uninterpreted POSIX input bytes and native Windows console records.
 - Preserve repeated Windows console key events across `readKey()` calls, including named keys and Unicode characters.
 
 ## 1.0.1 - 2026-09-22

@@ -100,7 +100,7 @@ jobs:
       - name: Check resource and callback lifetimes
         env:
           USE_ZEND_ALLOC: '0'
-        run: make test REPORT_EXIT_STATUS=1 NO_INTERACTION=1 TESTS="-m --show-diff tests/021_stream_resources.phpt tests/043_session_invalid_input.phpt tests/046_session_lifecycle.phpt tests/047_secret_prompt_callback.phpt"
+        run: make test REPORT_EXIT_STATUS=1 NO_INTERACTION=1 TESTS="-m --show-diff tests/021_stream_resources.phpt tests/043_session_invalid_input.phpt tests/046_session_lifecycle.phpt tests/047_secret_prompt_callback.phpt tests/048_read_event_bytes.phpt tests/049_read_event_buffered_mode.phpt"
       - name: Upload memory diagnostics
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

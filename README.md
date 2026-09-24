@@ -23,7 +23,7 @@ It exposes the pieces that are awkward to normalize in userland, especially once
 
 Created and maintained by Pratik Bhujel.
 
-Current release: `v1.0.1`.
+Source version: `v1.1.0` (release pending; latest published release: `v1.0.1`).
 
 ## Install
 
@@ -103,8 +103,8 @@ $duplex = Terminal::fromStream($stream);
   enum cases. `getInputStream()` and `getOutputStream()` return those values;
   `getStream()` returns the output value on an initialized session.
 
-`readKey()`, `readSecret()` and raw mode operate on input. `isTty()`, dimensions,
-ANSI/color operations, title, bell and writes operate on output. Use
+`readKey()`, `readEvent()`, `readSecret()` and raw mode operate on input. `isTty()`,
+dimensions, ANSI/color operations, title, bell and writes operate on output. Use
 `stream_isatty($input)` to check a resource used for input.
 
 Native input requires a TTY descriptor or Windows console input handle. Pipes
@@ -134,7 +134,7 @@ write/read failures and failed mode restoration also raise `\RuntimeException`.
 Invalid arguments and closed resources retain PHP's `\TypeError` / `\ValueError`
 behavior. Exceptions from user-defined stream callbacks propagate unchanged.
 
-Both reads restore the previous input mode before returning, including an outer
+Input reads restore the previous input mode before returning, including an outer
 raw mode. A failed restore is reported. On POSIX, pending PHP-buffered bytes are
 consumed first. Windows uses console key events: mixing PHP byte reads with
 native input is unsupported, and pending PHP-buffered bytes cause a read failure.
@@ -151,6 +151,14 @@ Named keys are arrows, Enter, Tab, Backspace, Escape, Home, End, Delete, PageUp,
 PageDown, Resize and F1–F12. Shift+Tab maps to Tab. Other control bytes remain
 strings. Unknown POSIX escape sequences map to Escape. Modifier combinations
 and full grapheme clusters are not normalized.
+
+`readEvent(?float $timeout = null): array|false` is the lower-level input path.
+Null timeout blocks; zero polls; `false` means timeout or unavailable input.
+POSIX returns raw byte chunks, including unknown control sequences. Windows
+returns native console records with key state, modifiers and repeat counts.
+Use `readKey()` for simple prompts and `readEvent()` when a parser needs those
+details. See the [API guide](docs/api.md) for event fields and the
+[integration guide](docs/integration.md) for version checks and TUI loops.
 
 For a prompt loop, keep one session alive:
 
@@ -232,11 +240,12 @@ No fixes are backported to pre-1.0 releases. See [the changelog](CHANGELOG.md).
 
 Use the `phpize` and `php-config` belonging to the PHP binary that will load the
 extension. Build in a path without spaces.
+The checkout below is for the prepared 1.1.0 tag once it is published.
 
 ```sh
 git clone https://github.com/prateekbhujel/php-terminal.git
 cd php-terminal
-git checkout v1.0.1
+git checkout v1.1.0
 phpize
 ./configure --with-php-config="$(command -v php-config)"
 make -j2
