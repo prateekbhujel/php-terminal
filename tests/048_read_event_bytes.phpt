@@ -24,24 +24,56 @@ $term = Io\Terminal\Terminal::fromStreams($input);
 $before = terminal_test_mode($input);
 $expected = %d;
 $data = '';
+$token = $term->enableRawMode();
+if ($token === false) {
+    throw new RuntimeException('Raw mode is unavailable');
+}
+$raw = terminal_test_mode($input);
 echo "READY\n";
-while (strlen($data) < $expected) {
-    $event = $term->readEvent(1.0);
-    if ($event === false || $event['type'] !== 'data' || !is_string($event['data']) || $event['data'] === '' || strlen($event['data']) > 4096) {
-        throw new RuntimeException('Missing or invalid data event');
+try {
+    while (strlen($data) < $expected) {
+        $event = $term->readEvent(1.0);
+        if ($event === false || $event['type'] !== 'data' || !is_string($event['data']) || $event['data'] === '' || strlen($event['data']) > 4096) {
+            throw new RuntimeException('Missing or invalid data event');
+        }
+        $data .= $event['data'];
     }
-    $data .= $event['data'];
+    if (terminal_test_mode($input) !== $raw) {
+        throw new RuntimeException('Outer raw mode was changed');
+    }
+} finally {
+    if (!$term->restoreMode($token)) {
+        throw new RuntimeException('Raw mode was not restored');
+    }
 }
 if (terminal_test_mode($input) !== $before) {
-    throw new RuntimeException('Temporary raw mode was not restored');
+    throw new RuntimeException('Original mode was not restored');
 }
 echo bin2hex($data), "\n";
 PHP;
 $child = sprintf($child, strlen($payload));
 [$output, $error, $echo, $status, $restored] = terminal_test_pty($child, $payload, true);
 var_dump($output === bin2hex($payload) . "\n", $error === '', $echo === '', $status === 0, $restored);
+$temporary = <<<'PHP'
+$input = fopen('php://fd/3', 'r+');
+$term = Io\Terminal\Terminal::fromStreams($input);
+$before = terminal_test_mode($input);
+echo "READY\n";
+$event = $term->readEvent(1.0);
+if ($event === false || $event['type'] !== 'data' || terminal_test_mode($input) !== $before) {
+    throw new RuntimeException('Temporary raw mode was not restored');
+}
+echo bin2hex($event['data']), "\n";
+PHP;
+[$output, $error, $echo, $status, $restored] = terminal_test_pty($temporary, 'z', true);
+var_dump($output === "7a\n", $error === '', $echo === '', $status === 0, $restored);
 ?>
 --EXPECT--
+bool(true)
+bool(true)
+bool(true)
+bool(true)
+bool(true)
 bool(true)
 bool(true)
 bool(true)

@@ -4,7 +4,8 @@ readEvent argument validation and non-console input behavior
 terminal
 --FILE--
 <?php
-$term = Io\Terminal\Terminal::fromStreams(fopen('php://memory', 'r+'));
+$input = fopen('php://memory', 'r+');
+$term = Io\Terminal\Terminal::fromStreams($input);
 var_dump($term->readEvent(0.0));
 foreach ([-1.0, NAN] as $timeout) {
     try {
@@ -13,6 +14,12 @@ foreach ([-1.0, NAN] as $timeout) {
         echo "invalid timeout\n";
     }
 }
+fclose($input);
+try {
+    $term->readEvent(0.0);
+} catch (TypeError $e) {
+    echo "closed-stream\n";
+}
 $method = new ReflectionMethod(Io\Terminal\Terminal::class, 'readEvent');
 echo $method->getReturnType(), "\n";
 ?>
@@ -20,4 +27,5 @@ echo $method->getReturnType(), "\n";
 bool(false)
 invalid timeout
 invalid timeout
+closed-stream
 array|false

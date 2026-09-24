@@ -127,6 +127,13 @@ switch ($argv[1]) {
         fwrite(STDOUT, "|RAW\n");
         // The parent verifies the console is still raw before releasing cleanup.
         fgets(STDIN);
+        if ($argv[1] === 'event-raw') {
+            $resize = $terminal->readEvent(0.0);
+            if ($resize === false || $resize['type'] !== 'resize') {
+                throw new RuntimeException('Resize was not queued between reads');
+            }
+            echo $resize['type'], '|', $resize['bufferCols'], '|', $resize['bufferRows'], '|';
+        }
         unset($terminal);
         echo 'restored';
         break;

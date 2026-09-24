@@ -80,10 +80,10 @@ UTF-8 sequence. Windows uses native console events and ignores that argument.
 ## Low-level input
 
 `readEvent(?float $timeout = null): array|false` returns a tagged array from
-the configured input, or `false` on timeout or unavailable input. Null blocks;
-zero polls. It temporarily enters raw mode and restores the previous mode,
-including an outer raw mode. The extension retains no reference to the returned
-array. Each event has a `type` field:
+the configured input, or `false` on timeout, unavailable input, or a native
+read/mode failure. Null blocks; zero polls. It temporarily enters raw mode and
+restores the previous mode, including an outer raw mode. The extension retains
+no reference to the returned array. Each event has a `type` field:
 
 | Backend | `type` | Other fields |
 | --- | --- | --- |
@@ -111,8 +111,9 @@ surrogate unit; callers can combine successive units. `repeatCount` is not
 expanded. A `readEvent()` after `readKey()` may receive the remaining count from
 a repeated record already partly consumed by `readKey()`. Windows resize fields
 are console *buffer* dimensions; use `getSize()` for the visible window size.
-Mouse delivery depends on the console input mode. The method enables window
-size notifications while reading and restores the prior mode afterward.
+Mouse delivery depends on the console input mode. A one-off read enables window
+size notifications only while reading; an explicit `enableRawMode()` session
+keeps them enabled between reads and restores the prior mode with its token.
 
 `readKey()` remains the convenience API with its existing normalization. Do not
 mix the two readers while assembling one POSIX escape sequence.

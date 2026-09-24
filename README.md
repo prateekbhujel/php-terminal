@@ -153,7 +153,8 @@ strings. Unknown POSIX escape sequences map to Escape. Modifier combinations
 and full grapheme clusters are not normalized.
 
 `readEvent(?float $timeout = null): array|false` is the lower-level input path.
-Null timeout blocks; zero polls; `false` means timeout or unavailable input.
+Null timeout blocks; zero polls; `false` means timeout, unavailable input, or a
+native read/mode failure.
 POSIX returns raw byte chunks, including unknown control sequences. Windows
 returns native console records with key state, modifiers and repeat counts.
 Use `readKey()` for simple prompts and `readEvent()` when a parser needs those

@@ -716,7 +716,8 @@ static bool terminal_enable_stream_raw_mode(terminal_native_stream handle, termi
 		return false;
 	}
 
-	raw_mode = terminal_make_raw_mode(mode);
+	/* Keep resize notifications queued between reads in an explicit raw session. */
+	raw_mode = terminal_make_raw_mode(mode) | ENABLE_WINDOW_INPUT;
 
 	if (!SetConsoleMode(handle, raw_mode)) {
 		return false;

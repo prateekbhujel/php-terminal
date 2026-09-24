@@ -133,6 +133,7 @@ class ConsoleHarness
     {
         Check(FlushConsoleInputBuffer(input), "FlushConsoleInputBuffer");
         uint before = Mode(input) | 7; // echo, line and processed input
+        if (scenario == "event-raw") before &= ~8U; // verify raw mode enables window events
         Check(SetConsoleMode(input, before), "Set initial mode");
         var info = new ProcessStartInfo(php, "-n -d " + Quote("extension=" + dll) + " " + Quote(script) + " " + scenario);
         info.UseShellExecute = false;
@@ -164,7 +165,13 @@ class ConsoleHarness
                     var raw = child.StandardOutput.ReadLineAsync();
                     Check(raw.Wait(5000) && raw.Result == "78|RAW", "Raw-mode handshake");
                     Check((Mode(input) & 7) == 0, "readKey restored mode during active raw session");
-                    if (scenario == "event-raw") Check(Mode(input) == (before & ~7U), "readEvent changed an active raw mode");
+                    if (scenario == "event-raw")
+                    {
+                        Check(Mode(input) == ((before & ~7U) | 8U), "Window events were not kept enabled in raw mode");
+                        var resize = new InputRecord[] { new InputRecord { Type = 4, BufferCols = 101, BufferRows = 37 } };
+                        uint resizeWritten;
+                        Check(WriteConsoleInputW(input, resize, 1, out resizeWritten) && resizeWritten == 1, "Queue resize between reads");
+                    }
                     prefix = raw.Result + "\n";
                     child.StandardInput.WriteLine("restore");
                     child.StandardInput.Flush();
@@ -246,7 +253,7 @@ class ConsoleHarness
                 "menu|42", 1,
                 new InputRecord[] { new InputRecord { Type = 8, CommandId = 42 } }));
             log.WriteLine(Run(args[0], args[1], args[2], input, "event-raw", "x", 0,
-                "78|RAW\nrestored", 1));
+                "78|RAW\nresize|101|37|restored", 1));
             return 0;
         }
         catch (Exception e) { log.WriteLine(e.ToString()); return 1; }

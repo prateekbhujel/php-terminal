@@ -90,7 +90,8 @@ assume one chunk is one key or complete UTF-8 character. The extension leaves
 `SIGWINCH` to the application's signal watcher. On Windows, dispatch by the
 event's `type` and use the original virtual key, UTF-16 unit and control-state
 fields when mapping input. `readEvent()` does not turn native key records into
-terminal escape sequences.
+terminal escape sequences. Hold an explicit raw-mode token across a Windows
+event loop to keep resize notifications enabled between reads.
 
 Use `getSize()` on resize paths rather than spawning `stty size` when the
 extension is available. On Windows, native raw mode and console key events avoid
