@@ -23,7 +23,7 @@ It exposes the pieces that are awkward to normalize in userland, especially once
 
 Created and maintained by Pratik Bhujel.
 
-Source version: `v1.1.0` (release pending; latest published release: `v1.0.1`).
+Current release: `v1.1.0`.
 
 ## Install
 
@@ -241,8 +241,6 @@ No fixes are backported to pre-1.0 releases. See [the changelog](CHANGELOG.md).
 
 Use the `phpize` and `php-config` belonging to the PHP binary that will load the
 extension. Build in a path without spaces.
-The checkout below is for the prepared 1.1.0 tag once it is published.
-
 ```sh
 git clone https://github.com/prateekbhujel/php-terminal.git
 cd php-terminal
