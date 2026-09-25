@@ -50,6 +50,14 @@ ZEND_TLS WCHAR terminal_pending_high_surrogate;
 ZEND_TLS WCHAR terminal_legacy_high_surrogate;
 #else
 typedef int terminal_native_stream;
+
+typedef struct _terminal_utf8_pending {
+	unsigned char bytes[4];
+	size_t length;
+	size_t expected;
+} terminal_utf8_pending;
+
+ZEND_TLS terminal_utf8_pending terminal_legacy_pending_utf8;
 #endif
 
 typedef struct _terminal_saved_mode {
@@ -90,6 +98,8 @@ typedef struct _terminal_object {
 	zend_object *active_mode_token;
 #ifdef PHP_WIN32
 	WCHAR pending_high_surrogate;
+#else
+	terminal_utf8_pending pending_utf8;
 #endif
 	zend_object std;
 } terminal_object;
@@ -216,6 +226,8 @@ static zend_object *terminal_create_object(zend_class_entry *ce)
 	intern->active_mode_token = NULL;
 #ifdef PHP_WIN32
 	intern->pending_high_surrogate = 0;
+#else
+	memset(&intern->pending_utf8, 0, sizeof(intern->pending_utf8));
 #endif
 
 	zend_object_std_init(&intern->std, ce);
@@ -1980,29 +1992,46 @@ static size_t terminal_utf8_sequence_len(unsigned char key)
 	return 1;
 }
 
-static zend_string *terminal_key_from_utf8_sequence(int fd, php_stream *stream, unsigned char key, int sequence_timeout_ms)
+static zend_string *terminal_finish_utf8_sequence(int fd, php_stream *stream, terminal_utf8_pending *pending, int first_timeout_ms, int sequence_timeout_ms)
 {
-	unsigned char sequence[4] = { key };
+	size_t initial_length = pending->length;
+
+	while (pending->length < pending->expected) {
+		unsigned char key;
+		int timeout_ms = pending->length == initial_length ? first_timeout_ms : sequence_timeout_ms;
+		int result = terminal_read_byte(fd, stream, &key, timeout_ms, false, NULL);
+
+		if (result != 1) {
+			return NULL;
+		}
+
+		pending->bytes[pending->length++] = key;
+		if ((key & 0xc0) != 0x80) {
+			zend_string *invalid = zend_string_init((const char *) pending->bytes, pending->length, false);
+			memset(pending, 0, sizeof(*pending));
+			return invalid;
+		}
+	}
+
+	zend_string *result = zend_string_init((const char *) pending->bytes, pending->length, false);
+	memset(pending, 0, sizeof(*pending));
+	return result;
+}
+
+static zend_string *terminal_key_from_utf8_sequence(int fd, php_stream *stream, unsigned char key, int sequence_timeout_ms, terminal_utf8_pending *pending)
+{
 	size_t sequence_len = terminal_utf8_sequence_len(key);
-	size_t i;
 
 	if (sequence_len == 1) {
 		return terminal_key_char(key);
 	}
 
-	for (i = 1; i < sequence_len; i++) {
-		int result = terminal_read_byte(fd, stream, &sequence[i], sequence_timeout_ms, false, NULL);
+	memset(pending, 0, sizeof(*pending));
+	pending->bytes[0] = key;
+	pending->length = 1;
+	pending->expected = sequence_len;
 
-		if (result != 1) {
-			return zend_string_init((const char *) sequence, i, false);
-		}
-
-		if ((sequence[i] & 0xc0) != 0x80) {
-			return zend_string_init((const char *) sequence, i + 1, false);
-		}
-	}
-
-	return zend_string_init((const char *) sequence, sequence_len, false);
+	return terminal_finish_utf8_sequence(fd, stream, pending, sequence_timeout_ms, sequence_timeout_ms);
 }
 
 static void terminal_secret_append_utf8_sequence(int fd, php_stream *stream, smart_str *secret, unsigned char key)
@@ -2033,7 +2062,7 @@ static void terminal_secret_append_utf8_sequence(int fd, php_stream *stream, sma
 	smart_str_appendl(secret, (const char *) sequence, sequence_len);
 }
 
-static zend_string *terminal_key_from_byte(int fd, php_stream *stream, unsigned char key, int sequence_timeout_ms)
+static zend_string *terminal_key_from_byte(int fd, php_stream *stream, unsigned char key, int sequence_timeout_ms, terminal_utf8_pending *pending)
 {
 	switch (key) {
 		case '\r':
@@ -2047,11 +2076,11 @@ static zend_string *terminal_key_from_byte(int fd, php_stream *stream, unsigned 
 		case 0x1b:
 			return terminal_key_from_escape_sequence(fd, stream, sequence_timeout_ms);
 		default:
-			return terminal_key_from_utf8_sequence(fd, stream, key, sequence_timeout_ms);
+			return terminal_key_from_utf8_sequence(fd, stream, key, sequence_timeout_ms, pending);
 	}
 }
 
-static zend_string *terminal_read_stream_key(terminal_native_stream input, php_stream *stream, double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
+static zend_string *terminal_read_stream_key(terminal_native_stream input, php_stream *stream, double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null, terminal_utf8_pending *pending)
 {
 	int fd = input;
 	int timeout_ms = terminal_timeout_to_ms(timeout, timeout_is_null);
@@ -2083,12 +2112,16 @@ static zend_string *terminal_read_stream_key(terminal_native_stream input, php_s
 		return NULL;
 	}
 
-	read_result = terminal_read_byte(fd, stream, &key, timeout_ms, true,
-		resize_handler_installed ? &resize_generation : NULL);
-	if (read_result == TERMINAL_READ_RESIZE) {
-		result = terminal_key_string("resize");
-	} else if (read_result == 1) {
-		result = terminal_key_from_byte(fd, stream, key, sequence_timeout_ms);
+	if (pending->length > 0) {
+		result = terminal_finish_utf8_sequence(fd, stream, pending, timeout_ms, sequence_timeout_ms);
+	} else {
+		read_result = terminal_read_byte(fd, stream, &key, timeout_ms, true,
+			resize_handler_installed ? &resize_generation : NULL);
+		if (read_result == TERMINAL_READ_RESIZE) {
+			result = terminal_key_string("resize");
+		} else if (read_result == 1) {
+			result = terminal_key_from_byte(fd, stream, key, sequence_timeout_ms, pending);
+		}
 	}
 
 	if (mode_changed && tcsetattr(fd, TCSANOW, &mode) != 0) {
@@ -2802,7 +2835,9 @@ static void terminal_do_read_key(terminal_object *owner, zval *stream_arg, doubl
 		? &owner->pending_high_surrogate
 		: &terminal_legacy_high_surrogate;
 #else
-	(void) owner;
+	terminal_utf8_pending *pending_utf8 = owner != NULL
+		? &owner->pending_utf8
+		: &terminal_legacy_pending_utf8;
 #endif
 
 	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDIN, stream_arg_num, &stream)) {
@@ -2818,7 +2853,7 @@ static void terminal_do_read_key(terminal_object *owner, zval *stream_arg, doubl
 #ifdef PHP_WIN32
 	key = terminal_read_stream_key(stream.native_stream, stream.php_stream, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null, pending_high_surrogate);
 #else
-	key = terminal_read_stream_key(stream.native_stream, stream.php_stream, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null);
+	key = terminal_read_stream_key(stream.native_stream, stream.php_stream, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null, pending_utf8);
 #endif
 	if (key == NULL) {
 		RETURN_FALSE;
@@ -3319,6 +3354,8 @@ ZEND_METHOD(Io_Terminal_Terminal, readEvent)
 	intern = Z_TERMINAL_P(ZEND_THIS);
 #ifdef PHP_WIN32
 	intern->pending_high_surrogate = 0;
+#else
+	memset(&intern->pending_utf8, 0, sizeof(intern->pending_utf8));
 #endif
 	terminal_do_read_event(&intern->input_stream_val, timeout, timeout_is_null, 0, return_value);
 }
@@ -3336,6 +3373,8 @@ ZEND_METHOD(Io_Terminal_Terminal, readSecret)
 	intern = Z_TERMINAL_P(ZEND_THIS);
 #ifdef PHP_WIN32
 	intern->pending_high_surrogate = 0;
+#else
+	memset(&intern->pending_utf8, 0, sizeof(intern->pending_utf8));
 #endif
 	terminal_do_read_secret(&intern->input_stream_val, &intern->output_stream_val, prompt, 0, return_value);
 }
@@ -3555,6 +3594,8 @@ ZEND_METHOD(Terminal_Terminal, readSecret)
 
 #ifdef PHP_WIN32
 	terminal_legacy_high_surrogate = 0;
+#else
+	memset(&terminal_legacy_pending_utf8, 0, sizeof(terminal_legacy_pending_utf8));
 #endif
 	terminal_do_read_secret(NULL, NULL, prompt, 0, return_value);
 }
@@ -3629,6 +3670,8 @@ PHP_RINIT_FUNCTION(terminal)
 	memset(&terminal_pending_key, 0, sizeof(terminal_pending_key));
 	terminal_pending_high_surrogate = 0;
 	terminal_legacy_high_surrogate = 0;
+#else
+	memset(&terminal_legacy_pending_utf8, 0, sizeof(terminal_legacy_pending_utf8));
 #endif
 	return SUCCESS;
 }
