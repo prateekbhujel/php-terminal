@@ -3114,6 +3114,13 @@ ZEND_METHOD(Io_Terminal_Terminal, restoreMode)
 	}
 
 	if (intern->active_mode_token != NULL) {
+		terminal_mode_token_object *mode = terminal_mode_token_from_obj(intern->active_mode_token);
+		if (!mode->valid || memcmp(mode->saved.magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN) != 0) {
+			OBJ_RELEASE(intern->active_mode_token);
+			intern->active_mode_token = NULL;
+			RETURN_FALSE;
+		}
+
 		zval token_zv;
 		ZVAL_OBJ(&token_zv, intern->active_mode_token);
 		terminal_do_restore_mode(&token_zv, 1, return_value);
