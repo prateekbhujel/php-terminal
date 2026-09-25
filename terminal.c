@@ -46,6 +46,7 @@ typedef HANDLE terminal_native_stream;
  * available when switching between sessions or between key and secret reads. */
 ZEND_TLS INPUT_RECORD terminal_pending_key;
 ZEND_TLS WCHAR terminal_pending_high_surrogate;
+ZEND_TLS WCHAR terminal_legacy_high_surrogate;
 #else
 typedef int terminal_native_stream;
 #endif
@@ -82,6 +83,9 @@ typedef struct _terminal_object {
 	zval input_stream_val;
 	zval output_stream_val;
 	zend_object *active_mode_token;
+#ifdef PHP_WIN32
+	WCHAR pending_high_surrogate;
+#endif
 	zend_object std;
 } terminal_object;
 
@@ -168,6 +172,9 @@ static zend_object *terminal_create_object(zend_class_entry *ce)
 	ZVAL_UNDEF(&intern->input_stream_val);
 	ZVAL_UNDEF(&intern->output_stream_val);
 	intern->active_mode_token = NULL;
+#ifdef PHP_WIN32
+	intern->pending_high_surrogate = 0;
+#endif
 
 	zend_object_std_init(&intern->std, ce);
 	object_properties_init(&intern->std, ce);
@@ -895,11 +902,11 @@ static bool terminal_read_console_record(HANDLE handle, DWORD wait_ms, INPUT_REC
 		&& ReadConsoleInputW(handle, record, 1, &records_read) && records_read == 1;
 }
 
-static zend_string *terminal_read_stream_key(terminal_native_stream input, php_stream *stream, double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null)
+static zend_string *terminal_read_stream_key(terminal_native_stream input, php_stream *stream, double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null, WCHAR *pending_high_surrogate)
 {
 	HANDLE handle = input;
 	DWORD mode = 0;
-	WCHAR high_surrogate = 0;
+	WCHAR high_surrogate = *pending_high_surrogate;
 	DWORD raw_mode;
 	DWORD wait_ms = terminal_timeout_to_wait_ms(timeout, timeout_is_null);
 	ULONGLONG deadline_ms = wait_ms == INFINITE ? 0 : GetTickCount64() + wait_ms;
@@ -958,6 +965,8 @@ static zend_string *terminal_read_stream_key(terminal_native_stream input, php_s
 			}
 		}
 	}
+
+	*pending_high_surrogate = high_surrogate;
 
 	if (mode_changed && !SetConsoleMode(handle, mode)) {
 		if (result != NULL) {
@@ -2665,11 +2674,18 @@ static void terminal_do_restore_mode(zval *mode_token, uint32_t arg_num, zval *r
 	RETURN_BOOL(restored);
 }
 
-static void terminal_do_read_key(zval *stream_arg, double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null, uint32_t stream_arg_num, zval *return_value)
+static void terminal_do_read_key(terminal_object *owner, zval *stream_arg, double timeout, bool timeout_is_null, double sequence_timeout, bool sequence_timeout_is_null, uint32_t stream_arg_num, zval *return_value)
 {
 	terminal_stream_target stream;
 	zend_string *key;
 	zend_object *key_case;
+#ifdef PHP_WIN32
+	WCHAR *pending_high_surrogate = owner != NULL
+		? &owner->pending_high_surrogate
+		: &terminal_legacy_high_surrogate;
+#else
+	(void) owner;
+#endif
 
 	if (!terminal_stream_target_init(stream_arg, TERMINAL_STREAM_STDIN, stream_arg_num, &stream)) {
 		RETURN_THROWS();
@@ -2681,7 +2697,11 @@ static void terminal_do_read_key(zval *stream_arg, double timeout, bool timeout_
 		RETURN_THROWS();
 	}
 
+#ifdef PHP_WIN32
+	key = terminal_read_stream_key(stream.native_stream, stream.php_stream, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null, pending_high_surrogate);
+#else
 	key = terminal_read_stream_key(stream.native_stream, stream.php_stream, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null);
+#endif
 	if (key == NULL) {
 		RETURN_FALSE;
 	}
@@ -3152,7 +3172,7 @@ ZEND_METHOD(Io_Terminal_Terminal, readKey)
 	}
 
 	intern = Z_TERMINAL_P(ZEND_THIS);
-	terminal_do_read_key(&intern->input_stream_val, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null, 0, return_value);
+	terminal_do_read_key(intern, &intern->input_stream_val, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null, 0, return_value);
 }
 
 ZEND_METHOD(Io_Terminal_Terminal, readEvent)
@@ -3172,6 +3192,9 @@ ZEND_METHOD(Io_Terminal_Terminal, readEvent)
 	}
 
 	intern = Z_TERMINAL_P(ZEND_THIS);
+#ifdef PHP_WIN32
+	intern->pending_high_surrogate = 0;
+#endif
 	terminal_do_read_event(&intern->input_stream_val, timeout, timeout_is_null, 0, return_value);
 }
 
@@ -3186,6 +3209,9 @@ ZEND_METHOD(Io_Terminal_Terminal, readSecret)
 	ZEND_PARSE_PARAMETERS_END();
 
 	intern = Z_TERMINAL_P(ZEND_THIS);
+#ifdef PHP_WIN32
+	intern->pending_high_surrogate = 0;
+#endif
 	terminal_do_read_secret(&intern->input_stream_val, &intern->output_stream_val, prompt, 0, return_value);
 }
 
@@ -3390,7 +3416,7 @@ ZEND_METHOD(Terminal_Terminal, readKey)
 		RETURN_THROWS();
 	}
 
-	terminal_do_read_key(NULL, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null, 0, return_value);
+	terminal_do_read_key(NULL, NULL, timeout, timeout_is_null, sequence_timeout, sequence_timeout_is_null, 0, return_value);
 }
 
 ZEND_METHOD(Terminal_Terminal, readSecret)
@@ -3402,6 +3428,9 @@ ZEND_METHOD(Terminal_Terminal, readSecret)
 		Z_PARAM_STR(prompt)
 	ZEND_PARSE_PARAMETERS_END();
 
+#ifdef PHP_WIN32
+	terminal_legacy_high_surrogate = 0;
+#endif
 	terminal_do_read_secret(NULL, NULL, prompt, 0, return_value);
 }
 
@@ -3454,6 +3483,7 @@ PHP_RINIT_FUNCTION(terminal)
 #ifdef PHP_WIN32
 	memset(&terminal_pending_key, 0, sizeof(terminal_pending_key));
 	terminal_pending_high_surrogate = 0;
+	terminal_legacy_high_surrogate = 0;
 #endif
 	return SUCCESS;
 }
