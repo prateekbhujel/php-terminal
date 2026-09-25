@@ -137,6 +137,18 @@ switch ($argv[1]) {
         unset($terminal);
         echo 'restored';
         break;
+    case 'raw-overlap':
+        $other = Terminal::fromStreams($input, $output);
+        if ($terminal->enableRawMode() === false || $other->enableRawMode() === false) {
+            throw new RuntimeException('Raw mode unavailable');
+        }
+        echo bin2hex($terminal->readKey(2.0)), "|RAW\n";
+        fgets(STDIN);
+        if (!$terminal->restoreMode() || !$other->restoreMode()) {
+            throw new RuntimeException('Raw mode restore failed');
+        }
+        echo 'restored';
+        break;
     default:
         throw new LogicException('Unknown scenario');
 }

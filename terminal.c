@@ -733,10 +733,17 @@ static bool terminal_enable_stream_raw_mode(terminal_native_stream handle, termi
 
 static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
 {
-	bool restored = terminal_native_stream_is_valid(saved->stream)
-		&& SetConsoleMode(saved->stream, saved->mode);
+	DWORD mode;
 
-	return restored;
+	if (!terminal_native_stream_is_valid(saved->stream) || !GetConsoleMode(saved->stream, &mode)) {
+		return false;
+	}
+
+	if ((terminal_make_raw_mode(mode) | ENABLE_WINDOW_INPUT) != mode) {
+		return true;
+	}
+
+	return SetConsoleMode(saved->stream, saved->mode);
 }
 
 static DWORD terminal_timeout_to_wait_ms(double timeout, bool timeout_is_null)
@@ -1496,7 +1503,20 @@ static bool terminal_enable_stream_raw_mode(terminal_native_stream fd, terminal_
 
 static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
 {
-	return saved->stream >= 0 && tcsetattr(saved->stream, TCSANOW, &saved->mode) == 0;
+	struct termios mode;
+	struct termios raw_mode;
+
+	if (saved->stream < 0 || tcgetattr(saved->stream, &mode) != 0) {
+		return false;
+	}
+
+	raw_mode = mode;
+	terminal_make_raw_mode(&raw_mode);
+	if (memcmp(&raw_mode, &mode, sizeof(mode)) != 0) {
+		return true;
+	}
+
+	return tcsetattr(saved->stream, TCSANOW, &saved->mode) == 0;
 }
 
 static int64_t terminal_current_time_ms(void)

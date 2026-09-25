@@ -160,7 +160,7 @@ class ConsoleHarness
                 uint written;
                 Check(WriteConsoleInputW(input, records, (uint)records.Length, out written) && written == records.Length, "Inject key events");
                 string prefix = "";
-                if (scenario == "raw" || scenario == "event-raw")
+                if (scenario == "raw" || scenario == "event-raw" || scenario == "raw-overlap")
                 {
                     var raw = child.StandardOutput.ReadLineAsync();
                     Check(raw.Wait(5000) && raw.Result == "78|RAW", "Raw-mode handshake");
@@ -218,6 +218,7 @@ class ConsoleHarness
             foreach (char abort in new char[] { '\x03', '\x04', '\x1b' })
                 log.WriteLine(Run(args[0], args[1], args[2], input, "abort", "bad" + abort, abort == '\x1b' ? (ushort)27 : (ushort)0, "cancelled|70773a20", 1));
             log.WriteLine(Run(args[0], args[1], args[2], input, "raw", "x", 0, "78|RAW\nrestored", 1));
+            log.WriteLine(Run(args[0], args[1], args[2], input, "raw-overlap", "x", 0, "78|RAW\nrestored", 1));
             log.WriteLine(Run(args[0], args[1], args[2], input, "event-key", "", 0,
                 "key|Left|-|1|2|37|75|0|8|1|0|0", 1,
                 new InputRecord[] { new InputRecord { Type = 1, KeyDown = 1, Repeat = 2, VirtualKey = 37, ScanCode = 75, ControlState = 8 } }));
