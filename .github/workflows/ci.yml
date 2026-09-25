@@ -81,6 +81,33 @@ jobs:
             config.log
           retention-days: 7
 
+
+  unix-zts:
+    name: unix-zts (8.5)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up ZTS PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          coverage: none
+          extensions: posix, pcntl, parallel
+        env:
+          phpts: ts
+          fail-fast: true
+
+      - name: Build
+        run: |
+          phpize
+          ./configure
+          make -j2
+
+      - name: Test concurrent SIGWINCH restoration
+        run: php -d extension="$PWD/modules/terminal.so" tests/posix/zts_signal_race.php
+
   memory:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

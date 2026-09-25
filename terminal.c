@@ -1156,57 +1156,101 @@ static zend_string *terminal_read_stream_secret(terminal_native_stream input, ph
 #define TERMINAL_READ_RESIZE 2
 
 #ifdef SIGWINCH
-static volatile sig_atomic_t terminal_resize_pending = 0;
+static volatile sig_atomic_t terminal_resize_generation = 0;
+static unsigned int terminal_resize_readers = 0;
+static struct sigaction terminal_previous_resize_action;
+#ifdef ZTS
+static MUTEX_T terminal_resize_mutex;
+#endif
+
+static void terminal_resize_lock(void)
+{
+#ifdef ZTS
+	tsrm_mutex_lock(terminal_resize_mutex);
+#endif
+}
+
+static void terminal_resize_unlock(void)
+{
+#ifdef ZTS
+	tsrm_mutex_unlock(terminal_resize_mutex);
+#endif
+}
 
 static void terminal_sigwinch_handler(int signo)
 {
 	(void) signo;
 
-	terminal_resize_pending = 1;
+	terminal_resize_generation = terminal_resize_generation == SIG_ATOMIC_MAX
+		? 0
+		: terminal_resize_generation + 1;
 }
 
-static bool terminal_install_resize_handler(struct sigaction *old_action)
+static bool terminal_install_resize_handler(sig_atomic_t *generation)
 {
 	struct sigaction action;
+	bool installed = true;
+	sig_atomic_t current_generation;
 
-	terminal_resize_pending = 0;
+	terminal_resize_lock();
+	current_generation = terminal_resize_generation;
 
-	memset(&action, 0, sizeof(action));
-	action.sa_handler = terminal_sigwinch_handler;
-	sigemptyset(&action.sa_mask);
+	if (terminal_resize_readers == 0) {
+		memset(&action, 0, sizeof(action));
+		action.sa_handler = terminal_sigwinch_handler;
+		sigemptyset(&action.sa_mask);
 
-	return sigaction(SIGWINCH, &action, old_action) == 0;
+		installed = sigaction(SIGWINCH, &action, &terminal_previous_resize_action) == 0;
+	}
+
+	if (installed) {
+		terminal_resize_readers++;
+		*generation = current_generation;
+	}
+
+	terminal_resize_unlock();
+
+	return installed;
 }
 
-static void terminal_restore_resize_handler(const struct sigaction *old_action)
+static void terminal_restore_resize_handler(void)
 {
-	sigaction(SIGWINCH, old_action, NULL);
+	terminal_resize_lock();
+
+	if (terminal_resize_readers > 0 && --terminal_resize_readers == 0) {
+		sigaction(SIGWINCH, &terminal_previous_resize_action, NULL);
+	}
+
+	terminal_resize_unlock();
 }
 
-static bool terminal_consume_resize_pending(void)
+static bool terminal_consume_resize_pending(sig_atomic_t *generation)
 {
-	if (terminal_resize_pending) {
-		terminal_resize_pending = 0;
+	sig_atomic_t current_generation = terminal_resize_generation;
+
+	if (current_generation != *generation) {
+		*generation = current_generation;
 		return true;
 	}
 
 	return false;
 }
 #else
-static bool terminal_install_resize_handler(void *old_action)
+static bool terminal_install_resize_handler(sig_atomic_t *generation)
 {
-	(void) old_action;
+	(void) generation;
 
 	return false;
 }
 
-static void terminal_restore_resize_handler(const void *old_action)
+static void terminal_restore_resize_handler(void)
 {
-	(void) old_action;
 }
 
-static bool terminal_consume_resize_pending(void)
+static bool terminal_consume_resize_pending(sig_atomic_t *generation)
 {
+	(void) generation;
+
 	return false;
 }
 #endif
@@ -1550,7 +1594,7 @@ static int terminal_wait_for_input(int fd, int timeout_ms)
 	return php_pollfd_for_ms(fd, PHP_POLLREADABLE, timeout_ms);
 }
 
-static int terminal_read_byte(int fd, php_stream *stream, unsigned char *byte, int timeout_ms, bool report_resize)
+static int terminal_read_byte(int fd, php_stream *stream, unsigned char *byte, int timeout_ms, bool report_resize, sig_atomic_t *resize_generation)
 {
 	int64_t deadline_ms = timeout_ms > 0 ? terminal_current_time_ms() + timeout_ms : 0;
 
@@ -1581,7 +1625,7 @@ static int terminal_read_byte(int fd, php_stream *stream, unsigned char *byte, i
 
 		if (ready < 0) {
 			if (errno == EINTR) {
-				if (terminal_consume_resize_pending()) {
+				if (resize_generation != NULL && terminal_consume_resize_pending(resize_generation)) {
 					if (report_resize) {
 						return TERMINAL_READ_RESIZE;
 					}
@@ -1602,7 +1646,7 @@ static int terminal_read_byte(int fd, php_stream *stream, unsigned char *byte, i
 
 		if (bytes_read < 0) {
 			if (errno == EINTR) {
-				if (terminal_consume_resize_pending()) {
+				if (resize_generation != NULL && terminal_consume_resize_pending(resize_generation)) {
 					if (report_resize) {
 						return TERMINAL_READ_RESIZE;
 					}
@@ -1800,14 +1844,14 @@ static zend_string *terminal_key_from_escape_sequence(int fd, php_stream *stream
 {
 	unsigned char sequence[24];
 	size_t sequence_len = 0;
-	int result = terminal_read_byte(fd, stream, &sequence[sequence_len++], sequence_timeout_ms, false);
+	int result = terminal_read_byte(fd, stream, &sequence[sequence_len++], sequence_timeout_ms, false, NULL);
 
 	if (result != 1) {
 		return terminal_key_string("escape");
 	}
 
 	if (sequence[0] == 'O') {
-		result = terminal_read_byte(fd, stream, &sequence[sequence_len++], sequence_timeout_ms, false);
+		result = terminal_read_byte(fd, stream, &sequence[sequence_len++], sequence_timeout_ms, false, NULL);
 		if (result != 1) {
 			return terminal_key_string("escape");
 		}
@@ -1820,7 +1864,7 @@ static zend_string *terminal_key_from_escape_sequence(int fd, php_stream *stream
 	}
 
 	while (sequence_len < sizeof(sequence)) {
-		result = terminal_read_byte(fd, stream, &sequence[sequence_len++], sequence_timeout_ms, false);
+		result = terminal_read_byte(fd, stream, &sequence[sequence_len++], sequence_timeout_ms, false, NULL);
 		if (result != 1) {
 			return terminal_key_string("escape");
 		}
@@ -1870,7 +1914,7 @@ static zend_string *terminal_key_from_utf8_sequence(int fd, php_stream *stream, 
 	}
 
 	for (i = 1; i < sequence_len; i++) {
-		int result = terminal_read_byte(fd, stream, &sequence[i], sequence_timeout_ms, false);
+		int result = terminal_read_byte(fd, stream, &sequence[i], sequence_timeout_ms, false, NULL);
 
 		if (result != 1) {
 			return zend_string_init((const char *) sequence, i, false);
@@ -1896,7 +1940,7 @@ static void terminal_secret_append_utf8_sequence(int fd, php_stream *stream, sma
 	}
 
 	for (i = 1; i < sequence_len; i++) {
-		int result = terminal_read_byte(fd, stream, &sequence[i], TERMINAL_SEQUENCE_TIMEOUT_MS, false);
+		int result = terminal_read_byte(fd, stream, &sequence[i], TERMINAL_SEQUENCE_TIMEOUT_MS, false, NULL);
 
 		if (result != 1) {
 			smart_str_appendl(secret, (const char *) sequence, i);
@@ -1941,22 +1985,14 @@ static zend_string *terminal_read_stream_key(terminal_native_stream input, php_s
 	int read_result;
 	zend_string *result = NULL;
 	bool mode_changed;
-#ifdef SIGWINCH
-	struct sigaction old_resize_action;
-#endif
+	sig_atomic_t resize_generation = 0;
 	bool resize_handler_installed;
 
 	if (fd < 0 || isatty(fd) != 1 || tcgetattr(fd, &mode) != 0) {
 		return NULL;
 	}
 
-	resize_handler_installed = terminal_install_resize_handler(
-#ifdef SIGWINCH
-		&old_resize_action
-#else
-		NULL
-#endif
-	);
+	resize_handler_installed = terminal_install_resize_handler(&resize_generation);
 
 	raw_mode = mode;
 	terminal_make_raw_mode(&raw_mode);
@@ -1964,19 +2000,14 @@ static zend_string *terminal_read_stream_key(terminal_native_stream input, php_s
 
 	if (mode_changed && tcsetattr(fd, TCSANOW, &raw_mode) != 0) {
 		if (resize_handler_installed) {
-			terminal_restore_resize_handler(
-#ifdef SIGWINCH
-				&old_resize_action
-#else
-				NULL
-#endif
-			);
+			terminal_restore_resize_handler();
 		}
 
 		return NULL;
 	}
 
-	read_result = terminal_read_byte(fd, stream, &key, timeout_ms, true);
+	read_result = terminal_read_byte(fd, stream, &key, timeout_ms, true,
+		resize_handler_installed ? &resize_generation : NULL);
 	if (read_result == TERMINAL_READ_RESIZE) {
 		result = terminal_key_string("resize");
 	} else if (read_result == 1) {
@@ -1985,13 +2016,7 @@ static zend_string *terminal_read_stream_key(terminal_native_stream input, php_s
 
 	if (mode_changed && tcsetattr(fd, TCSANOW, &mode) != 0) {
 		if (resize_handler_installed) {
-			terminal_restore_resize_handler(
-#ifdef SIGWINCH
-				&old_resize_action
-#else
-				NULL
-#endif
-			);
+			terminal_restore_resize_handler();
 		}
 
 		if (result != NULL) {
@@ -2002,13 +2027,7 @@ static zend_string *terminal_read_stream_key(terminal_native_stream input, php_s
 	}
 
 	if (resize_handler_installed) {
-		terminal_restore_resize_handler(
-#ifdef SIGWINCH
-			&old_resize_action
-#else
-			NULL
-#endif
-		);
+		terminal_restore_resize_handler();
 	}
 
 	return result;
@@ -2038,7 +2057,7 @@ static bool terminal_read_stream_event(terminal_native_stream input, php_stream 
 		return false;
 	}
 
-	read_result = terminal_read_byte(fd, stream, (unsigned char *) buffer, timeout_ms, false);
+	read_result = terminal_read_byte(fd, stream, (unsigned char *) buffer, timeout_ms, false, NULL);
 	if (read_result == 1) {
 		length = 1;
 		/* Drain only bytes already available. Bound each event so large pastes
@@ -2101,7 +2120,7 @@ static zend_string *terminal_read_stream_secret(terminal_native_stream input, ph
 		unsigned char key;
 		int result;
 
-		result = terminal_read_byte(fd, stream, &key, -1, false);
+		result = terminal_read_byte(fd, stream, &key, -1, false, NULL);
 		if (result != 1) {
 			break;
 		}
@@ -3414,6 +3433,13 @@ PHP_MINIT_FUNCTION(terminal)
 	ZEND_TSRMLS_CACHE_UPDATE();
 #endif
 
+#if !defined(PHP_WIN32) && defined(SIGWINCH) && defined(ZTS)
+	terminal_resize_mutex = tsrm_mutex_alloc();
+	if (terminal_resize_mutex == NULL) {
+		return FAILURE;
+	}
+#endif
+
 	terminal_backend_ce = register_class_Io_Terminal_Backend();
 	terminal_stream_ce = register_class_Io_Terminal_Stream();
 	terminal_color_depth_ce = register_class_Io_Terminal_ColorDepth();
@@ -3442,6 +3468,18 @@ PHP_MINIT_FUNCTION(terminal)
 	zend_register_class_alias("Io\\Terminal", terminal_terminal_ce);
 
 	legacy_terminal_ce = register_class_Terminal_Terminal();
+
+	return SUCCESS;
+}
+
+PHP_MSHUTDOWN_FUNCTION(terminal)
+{
+#if !defined(PHP_WIN32) && defined(SIGWINCH) && defined(ZTS)
+	if (terminal_resize_mutex != NULL) {
+		tsrm_mutex_free(terminal_resize_mutex);
+		terminal_resize_mutex = NULL;
+	}
+#endif
 
 	return SUCCESS;
 }
@@ -3478,7 +3516,7 @@ zend_module_entry terminal_module_entry = {
 	"terminal",
 	NULL,
 	PHP_MINIT(terminal),
-	NULL,
+	PHP_MSHUTDOWN(terminal),
 	PHP_RINIT(terminal),
 	NULL,
 	PHP_MINFO(terminal),
