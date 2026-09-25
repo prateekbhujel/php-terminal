@@ -39,6 +39,14 @@ switch ($argv[1]) {
             (int) $event['ctrl'], (int) $event['alt'], (int) $event['shift'],
         ]);
         break;
+    case 'key-surrogate-split':
+        echo "READY1\n";
+        $first = $terminal->readKey(0.2);
+        echo $first === false ? "false\n" : bin2hex($first) . "\n";
+        echo "READY2\n";
+        $second = $terminal->readKey(2.0);
+        echo $second === false ? 'false' : bin2hex($second);
+        break;
     case 'event-surrogates':
         $events = [$terminal->readEvent(2.0), $terminal->readEvent(2.0)];
         foreach ($events as $event) {

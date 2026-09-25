@@ -191,6 +191,58 @@ class ConsoleHarness
             }
         }
     }
+    static string RunSplitSurrogate(string php, string dll, string script, IntPtr input)
+    {
+        const string scenario = "key-surrogate-split";
+        Check(FlushConsoleInputBuffer(input), "FlushConsoleInputBuffer");
+        uint before = Mode(input) | 7;
+        Check(SetConsoleMode(input, before), "Set initial mode");
+
+        var info = new ProcessStartInfo(php, "-n -d " + Quote("extension=" + dll) + " " + Quote(script) + " " + scenario);
+        info.UseShellExecute = false;
+        info.CreateNoWindow = false;
+        info.RedirectStandardInput = info.RedirectStandardOutput = info.RedirectStandardError = true;
+
+        using (var child = Process.Start(info))
+        {
+            try
+            {
+                var ready = child.StandardOutput.ReadLineAsync();
+                Check(ready.Wait(5000) && ready.Result == "READY", "Child startup: " + scenario);
+                var readyFirst = child.StandardOutput.ReadLineAsync();
+                Check(readyFirst.Wait(5000) && readyFirst.Result == "READY1", "Missing first surrogate handshake");
+                Await(() => (Mode(input) & 7) == 0 || child.HasExited, "First readKey did not enter raw mode");
+
+                var high = new InputRecord[] { new InputRecord { Type = 1, KeyDown = 1, Repeat = 1, Character = '\ud83d' } };
+                uint written;
+                Check(WriteConsoleInputW(input, high, 1, out written) && written == 1, "Inject high surrogate");
+
+                var first = child.StandardOutput.ReadLineAsync();
+                Check(first.Wait(5000) && first.Result == "false", "High surrogate read should time out");
+                var readySecond = child.StandardOutput.ReadLineAsync();
+                Check(readySecond.Wait(5000) && readySecond.Result == "READY2", "Missing second surrogate handshake");
+                Await(() => (Mode(input) & 7) == 0 || child.HasExited, "Second readKey did not enter raw mode");
+
+                var low = new InputRecord[] { new InputRecord { Type = 1, KeyDown = 1, Repeat = 1, Character = '\ude00' } };
+                Check(WriteConsoleInputW(input, low, 1, out written) && written == 1, "Inject low surrogate");
+
+                var output = child.StandardOutput.ReadToEndAsync();
+                var error = child.StandardError.ReadToEndAsync();
+                Check(child.WaitForExit(5000), "Child timed out");
+                Check(child.ExitCode == 0 && error.Result == "", "Child failed: " + error.Result);
+                Check(output.Result == "f09f9880", scenario + " output: " + output.Result);
+                Check(Mode(input) == before, scenario + " did not restore mode");
+
+                return scenario + ": passed";
+            }
+            finally
+            {
+                if (!child.HasExited) child.Kill();
+                SetConsoleMode(input, before);
+            }
+        }
+    }
+
     static int Main(string[] args)
     {
         // Preserve CI's redirected stdout while allocating an independent console.
@@ -206,6 +258,7 @@ class ConsoleHarness
             log.WriteLine(Run(args[0], args[1], args[2], input, "key", "x", 0, "78", 1));
             log.WriteLine(Run(args[0], args[1], args[2], input, "key", "\0", 38, "Up", 1));
             log.WriteLine(Run(args[0], args[1], args[2], input, "key", "\ud83d\ude00", 0, "f09f9880", 1));
+            log.WriteLine(RunSplitSurrogate(args[0], args[1], args[2], input));
             log.WriteLine(Run(args[0], args[1], args[2], input, "key-repeat", "x", 0, "78|78|78", 3));
             log.WriteLine(Run(args[0], args[1], args[2], input, "key-repeat-legacy", "x", 0, "78|78|78", 3));
             log.WriteLine(Run(args[0], args[1], args[2], input, "key-repeat", "\0", 38, "Up|Up|Up", 3));
