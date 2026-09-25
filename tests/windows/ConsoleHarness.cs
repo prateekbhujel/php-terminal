@@ -243,6 +243,56 @@ class ConsoleHarness
         }
     }
 
+    static string RunOverlappingRawMode(string php, string dll, string script, IntPtr input)
+    {
+        const string scenario = "raw-overlap";
+        Check(FlushConsoleInputBuffer(input), "FlushConsoleInputBuffer");
+        uint before = Mode(input) | 7;
+        Check(SetConsoleMode(input, before), "Set initial mode");
+
+        var info = new ProcessStartInfo(php, "-n -d " + Quote("extension=" + dll) + " " + Quote(script) + " " + scenario);
+        info.UseShellExecute = false;
+        info.CreateNoWindow = false;
+        info.RedirectStandardInput = info.RedirectStandardOutput = info.RedirectStandardError = true;
+
+        using (var child = Process.Start(info))
+        {
+            try
+            {
+                var ready = child.StandardOutput.ReadLineAsync();
+                Check(ready.Wait(5000) && ready.Result == "READY", "Child startup: " + scenario);
+
+                var overlap = child.StandardOutput.ReadLineAsync();
+                Check(overlap.Wait(5000) && overlap.Result == "OVERLAP", "Raw overlap handshake");
+                Check((Mode(input) & 7) == 0, "Overlapping sessions did not keep the console raw");
+
+                child.StandardInput.WriteLine("restore-first");
+                child.StandardInput.Flush();
+
+                var first = child.StandardOutput.ReadLineAsync();
+                Check(first.Wait(5000) && first.Result == "true|FIRST", "First restore failed");
+                Check((Mode(input) & 7) == 0, "Older restore changed the mode while a newer owner was active");
+
+                child.StandardInput.WriteLine("restore-second");
+                child.StandardInput.Flush();
+
+                var output = child.StandardOutput.ReadToEndAsync();
+                var error = child.StandardError.ReadToEndAsync();
+                Check(child.WaitForExit(5000), "Child timed out");
+                Check(child.ExitCode == 0 && error.Result == "", "Child failed: " + error.Result);
+                Check(output.Result == "true", scenario + " output: " + output.Result);
+                Check(Mode(input) == before, scenario + " did not restore the original mode");
+
+                return scenario + ": passed";
+            }
+            finally
+            {
+                if (!child.HasExited) child.Kill();
+                SetConsoleMode(input, before);
+            }
+        }
+    }
+
     static int Main(string[] args)
     {
         // Preserve CI's redirected stdout while allocating an independent console.
@@ -271,6 +321,7 @@ class ConsoleHarness
             foreach (char abort in new char[] { '\x03', '\x04', '\x1b' })
                 log.WriteLine(Run(args[0], args[1], args[2], input, "abort", "bad" + abort, abort == '\x1b' ? (ushort)27 : (ushort)0, "cancelled|70773a20", 1));
             log.WriteLine(Run(args[0], args[1], args[2], input, "raw", "x", 0, "78|RAW\nrestored", 1));
+            log.WriteLine(RunOverlappingRawMode(args[0], args[1], args[2], input));
             log.WriteLine(Run(args[0], args[1], args[2], input, "event-key", "", 0,
                 "key|Left|-|1|2|37|75|0|8|1|0|0", 1,
                 new InputRecord[] { new InputRecord { Type = 1, KeyDown = 1, Repeat = 2, VirtualKey = 37, ScanCode = 75, ControlState = 8 } }));

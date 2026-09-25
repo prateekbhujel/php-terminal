@@ -120,6 +120,17 @@ switch ($argv[1]) {
         rewind($output);
         echo '|', bin2hex(stream_get_contents($output));
         break;
+    case 'raw-overlap':
+        $a = Terminal::fromStreams($input, $output);
+        $b = Terminal::fromStreams($input, $output);
+        $a->enableRawMode();
+        $b->enableRawMode();
+        echo "OVERLAP\n";
+        fgets(STDIN);
+        echo $a->restoreMode() ? "true|FIRST\n" : "false|FIRST\n";
+        fgets(STDIN);
+        echo $b->restoreMode() ? 'true' : 'false';
+        break;
     case 'raw':
     case 'event-raw':
         $token = $terminal->enableRawMode();

@@ -29,6 +29,7 @@
 #else
 # include <signal.h>
 # include <sys/select.h>
+# include <sys/stat.h>
 # include <sys/time.h>
 # include <termios.h>
 # include <time.h>
@@ -64,7 +65,10 @@ typedef struct _terminal_saved_mode {
 typedef struct _terminal_mode_token_object {
 	terminal_saved_mode saved;
 	zval stream_resource;
+	struct _terminal_mode_token_object *active_prev;
+	struct _terminal_mode_token_object *active_next;
 	bool valid;
+	bool tracked;
 	zend_object std;
 } terminal_mode_token_object;
 
@@ -78,6 +82,7 @@ static zend_class_entry *terminal_terminal_ce;
 static zend_class_entry *legacy_terminal_ce;
 static zend_object_handlers terminal_mode_token_handlers;
 static zend_object_handlers terminal_object_handlers;
+ZEND_TLS terminal_mode_token_object *terminal_active_mode_tokens;
 
 typedef struct _terminal_object {
 	zval input_stream_val;
@@ -90,7 +95,9 @@ typedef struct _terminal_object {
 } terminal_object;
 
 static bool terminal_mode_token_stream_is_valid(const terminal_mode_token_object *mode);
+static bool terminal_mode_streams_match(terminal_native_stream first, terminal_native_stream second);
 static bool terminal_restore_stream_mode(const terminal_saved_mode *saved);
+static bool terminal_release_mode_token(terminal_mode_token_object *mode);
 
 static inline terminal_mode_token_object *terminal_mode_token_from_obj(zend_object *obj)
 {
@@ -112,7 +119,10 @@ static zend_object *terminal_mode_token_create_object(zend_class_entry *ce)
 
 	memset(&intern->saved, 0, sizeof(intern->saved));
 	ZVAL_UNDEF(&intern->stream_resource);
+	intern->active_prev = NULL;
+	intern->active_next = NULL;
 	intern->valid = false;
+	intern->tracked = false;
 
 	zend_object_std_init(&intern->std, ce);
 	object_properties_init(&intern->std, ce);
@@ -121,15 +131,46 @@ static zend_object *terminal_mode_token_create_object(zend_class_entry *ce)
 	return &intern->std;
 }
 
+static void terminal_untrack_mode_token(terminal_mode_token_object *mode)
+{
+	if (!mode->tracked) {
+		return;
+	}
+
+	if (mode->active_prev != NULL) {
+		mode->active_prev->active_next = mode->active_next;
+	} else {
+		terminal_active_mode_tokens = mode->active_next;
+	}
+
+	if (mode->active_next != NULL) {
+		mode->active_next->active_prev = mode->active_prev;
+	}
+
+	mode->active_prev = NULL;
+	mode->active_next = NULL;
+	mode->tracked = false;
+}
+
+static void terminal_track_mode_token(terminal_mode_token_object *mode)
+{
+	mode->active_prev = NULL;
+	mode->active_next = terminal_active_mode_tokens;
+	if (terminal_active_mode_tokens != NULL) {
+		terminal_active_mode_tokens->active_prev = mode;
+	}
+	terminal_active_mode_tokens = mode;
+	mode->tracked = true;
+}
+
 static void terminal_mode_token_free_obj(zend_object *object)
 {
 	terminal_mode_token_object *intern = terminal_mode_token_from_obj(object);
 
 	if (intern->valid && memcmp(intern->saved.magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN) == 0) {
-		if (terminal_mode_token_stream_is_valid(intern)) {
-			terminal_restore_stream_mode(&intern->saved);
-		}
+		terminal_release_mode_token(intern);
 	}
+	terminal_untrack_mode_token(intern);
 
 	if (!Z_ISUNDEF(intern->stream_resource)) {
 		zval_ptr_dtor(&intern->stream_resource);
@@ -153,6 +194,7 @@ static void terminal_create_mode_token(zval *return_value, const terminal_saved_
 		ZVAL_COPY(&intern->stream_resource, stream_resource);
 	}
 	intern->valid = true;
+	terminal_track_mode_token(intern);
 }
 
 static zend_string *terminal_key_string(const char *key)
@@ -190,10 +232,7 @@ static void terminal_free_obj(zend_object *object)
 	if (intern->active_mode_token != NULL) {
 		terminal_mode_token_object *mode = terminal_mode_token_from_obj(intern->active_mode_token);
 		if (mode->valid && memcmp(mode->saved.magic, TERMINAL_MODE_TOKEN_MAGIC, TERMINAL_MODE_TOKEN_MAGIC_LEN) == 0) {
-			if (terminal_mode_token_stream_is_valid(mode)) {
-				terminal_restore_stream_mode(&mode->saved);
-			}
-			mode->valid = false;
+			terminal_release_mode_token(mode);
 		}
 		OBJ_RELEASE(intern->active_mode_token);
 		intern->active_mode_token = NULL;
@@ -736,6 +775,17 @@ static bool terminal_enable_stream_raw_mode(terminal_native_stream handle, termi
 	saved->mode = mode;
 
 	return true;
+}
+
+static bool terminal_mode_streams_match(terminal_native_stream first, terminal_native_stream second)
+{
+	DWORD first_mode;
+	DWORD second_mode;
+
+	return terminal_native_stream_is_valid(first)
+		&& terminal_native_stream_is_valid(second)
+		&& GetConsoleMode(first, &first_mode)
+		&& GetConsoleMode(second, &second_mode);
 }
 
 static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
@@ -1545,6 +1595,24 @@ static bool terminal_enable_stream_raw_mode(terminal_native_stream fd, terminal_
 	saved->mode = mode;
 
 	return true;
+}
+
+static bool terminal_mode_streams_match(terminal_native_stream first, terminal_native_stream second)
+{
+	struct stat first_stat;
+	struct stat second_stat;
+
+	if (first == second) {
+		return true;
+	}
+
+	return first >= 0
+		&& second >= 0
+		&& fstat(first, &first_stat) == 0
+		&& fstat(second, &second_stat) == 0
+		&& S_ISCHR(first_stat.st_mode)
+		&& S_ISCHR(second_stat.st_mode)
+		&& first_stat.st_rdev == second_stat.st_rdev;
 }
 
 static bool terminal_restore_stream_mode(const terminal_saved_mode *saved)
@@ -2659,6 +2727,45 @@ static void terminal_do_enable_raw_mode(zval *stream_arg, uint32_t arg_num, zval
 	terminal_create_mode_token(return_value, &saved, stream.stream_resource);
 }
 
+static bool terminal_release_mode_token(terminal_mode_token_object *mode)
+{
+	terminal_mode_token_object *candidate = terminal_active_mode_tokens;
+	terminal_mode_token_object *newer = NULL;
+	bool restored;
+
+	while (candidate != NULL && candidate != mode) {
+		if (candidate->valid && terminal_mode_streams_match(candidate->saved.stream, mode->saved.stream)) {
+			newer = candidate;
+		}
+		candidate = candidate->active_next;
+	}
+
+	if (candidate != mode) {
+		newer = NULL;
+	}
+
+	if (newer != NULL) {
+		newer->saved.mode = mode->saved.mode;
+		terminal_untrack_mode_token(mode);
+		memset(&mode->saved, 0, sizeof(mode->saved));
+		mode->valid = false;
+		return true;
+	}
+
+	if (!terminal_mode_token_stream_is_valid(mode)) {
+		return false;
+	}
+
+	restored = terminal_restore_stream_mode(&mode->saved);
+	if (restored) {
+		terminal_untrack_mode_token(mode);
+		memset(&mode->saved, 0, sizeof(mode->saved));
+		mode->valid = false;
+	}
+
+	return restored;
+}
+
 static void terminal_do_restore_mode(zval *mode_token, uint32_t arg_num, zval *return_value)
 {
 	terminal_mode_token_object *mode;
@@ -2676,18 +2783,10 @@ static void terminal_do_restore_mode(zval *mode_token, uint32_t arg_num, zval *r
 		RETURN_THROWS();
 	}
 
-	if (!terminal_mode_token_stream_is_valid(mode)) {
-		RETURN_FALSE;
-	}
-
-	restored = terminal_restore_stream_mode(&mode->saved);
-	if (restored) {
-		if (!Z_ISUNDEF(mode->stream_resource)) {
-			zval_ptr_dtor(&mode->stream_resource);
-			ZVAL_UNDEF(&mode->stream_resource);
-		}
-		memset(&mode->saved, 0, sizeof(mode->saved));
-		mode->valid = false;
+	restored = terminal_release_mode_token(mode);
+	if (restored && !Z_ISUNDEF(mode->stream_resource)) {
+		zval_ptr_dtor(&mode->stream_resource);
+		ZVAL_UNDEF(&mode->stream_resource);
 	}
 
 	RETURN_BOOL(restored);
@@ -3525,6 +3624,7 @@ PHP_RINIT_FUNCTION(terminal)
 #if defined(ZTS) && defined(COMPILE_DL_TERMINAL)
 	ZEND_TSRMLS_CACHE_UPDATE();
 #endif
+	terminal_active_mode_tokens = NULL;
 #ifdef PHP_WIN32
 	memset(&terminal_pending_key, 0, sizeof(terminal_pending_key));
 	terminal_pending_high_surrogate = 0;
