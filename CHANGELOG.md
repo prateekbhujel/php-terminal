@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1 - 2026-09-26
+
+- Keep session state consistent when a raw-mode token is restored through another session or the legacy static API.
+- Preserve raw-mode ownership across overlapping terminal sessions, including out-of-order restoration.
+- Coordinate POSIX `SIGWINCH` handling across concurrent reads so one reader cannot restore another reader's handler.
+- Preserve split Windows UTF-16 surrogate pairs across separate `readKey()` calls.
+- Preserve incomplete POSIX UTF-8 sequences across `readKey()` calls when the sequence timeout expires.
+
 ## 1.1.0 - 2026-09-24
 
 - Add `Io\Terminal\Terminal::readEvent()` for uninterpreted POSIX input bytes and native Windows console records.
