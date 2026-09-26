@@ -23,7 +23,7 @@ It exposes the pieces that are awkward to normalize in userland, especially once
 
 Created and maintained by Pratik Bhujel.
 
-Current release: `v1.1.0`.
+Current release: `v1.1.1`.
 
 ## Install
 
@@ -244,7 +244,7 @@ extension. Build in a path without spaces.
 ```sh
 git clone https://github.com/prateekbhujel/php-terminal.git
 cd php-terminal
-git checkout v1.1.0
+git checkout v1.1.1
 phpize
 ./configure --with-php-config="$(command -v php-config)"
 make -j2
